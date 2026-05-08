@@ -1,0 +1,8 @@
+{
+  "appId": "com.ulysseimpex.mecfsmonitoring",
+  "appName": "ME/CFS Monitoring",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}

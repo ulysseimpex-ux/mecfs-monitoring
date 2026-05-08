@@ -1,0 +1,21 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Capacitor — généré par `npx cap add android` (regénéré par CI à chaque build)
+android/
+
+# Gradle / Android Studio (au cas où vous committeriez android/)
+.gradle/
+**/build/
+**/.cxx/
+local.properties
+captures/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db

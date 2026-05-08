@@ -1,0 +1,2387 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Suivi Santé">
+<meta name="theme-color" content="#f5ede6">
+<link rel="manifest" href="/suivi-sante/manifest.json">
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/suivi-sante/sw.js')
+      .then(()=>console.log('SW enregistré'))
+      .catch(e=>console.log('SW erreur:', e));
+  });
+}
+</script>
+<title>Suivi Santé</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#f5ede6;
+  --surface:#ffffff;
+  --surface2:#f0e4dc;
+  --border:#e4d0c4;
+  --accent:#2a8a70;
+  --accent2:#7060a0;
+  --warn:#c04820;
+  --good:#2a8050;
+  --bad:#c03040;
+  --text:#3a1a0a;
+  --muted:#a09080;
+  --radius:18px
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:80px;font-size:15px}
+.header{background:#fff;padding:14px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.header h1{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--text)}
+.date-badge{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--muted)}
+.nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);display:flex;z-index:100;box-shadow:0 -1px 4px rgba(0,0,0,0.04)}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 2px;background:none;border:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:10px;cursor:pointer;transition:color 0.2s}
+.nav-btn.active{color:var(--accent)}
+.nav-btn svg{width:22px;height:22px}
+.home-card{transition:transform 0.15s,box-shadow 0.15s}
+.home-card:active{transform:scale(0.96)}
+.page{display:none}.page.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:12px}
+.form-row{margin-bottom:14px}
+.form-label{font-size:12px;color:var(--muted);margin-bottom:6px;display:block;font-weight:500}
+.form-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;outline:none;transition:border-color 0.2s}
+.form-input:focus{border-color:var(--accent);background:#fff}
+.pm-row{display:flex;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;width:160px}
+.pm-btn{background:none;border:none;color:var(--accent);font-size:22px;font-weight:300;width:48px;height:44px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.pm-btn:active{background:rgba(59,110,245,0.1)}
+.pm-val{flex:1;text-align:center;font-size:18px;font-weight:600;color:var(--text)}
+.tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.tag{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px;color:var(--text)}
+.tag.selected{background:rgba(59,110,245,0.1);border-color:var(--accent);color:var(--accent)}
+.tag .remove{color:var(--bad);font-size:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 20px;border-radius:12px;border:none;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-primary{background:var(--accent);color:#fff;width:100%}
+.btn-primary:active{transform:scale(0.97)}
+.btn-sm{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:12px;padding:7px 14px;width:auto}
+.history-item{background:var(--surface);border-radius:12px;padding:14px;margin-bottom:8px;cursor:pointer;border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.history-item:active{border-color:var(--accent)}
+.history-date{font-size:12px;color:var(--muted);margin-bottom:6px}
+.score-badge{display:flex;align-items:center;gap:4px;font-size:12px;background:var(--surface2);border-radius:6px;padding:3px 8px;border:1px solid var(--border)}
+.dot{width:8px;height:8px;border-radius:50%}
+.pem-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(232,114,12,0.12);border:1px solid rgba(232,114,12,0.3);color:var(--warn);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600}
+.chart-wrap{position:relative;height:300px;margin:8px 0}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;display:none;align-items:flex-end}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:85vh;overflow-y:auto;border-top:1px solid var(--border);box-shadow:0 -4px 20px rgba(0,0,0,0.1)}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
+.modal-title{font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:16px;color:var(--text)}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.detail-row:last-child{border-bottom:none}
+.detail-row .key{color:var(--muted)}
+.detail-row .val{font-weight:600;color:var(--text)}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--good);color:#fff;padding:10px 20px;border-radius:20px;font-weight:600;font-size:13px;z-index:300;opacity:0;transition:all 0.3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.page-pad{padding:12px}
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.page-title{font-family:'DM Serif Display',serif;font-size:22px;color:var(--text)}
+/* AUTOCOMPLETE */
+.autocomplete-wrap{position:relative}
+.autocomplete-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:200;max-height:200px;overflow-y:auto;display:none}
+.autocomplete-list.open{display:block}
+.autocomplete-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text)}
+.autocomplete-item:last-child{border-bottom:none}
+.autocomplete-item:active{background:var(--surface2)}
+/* TAP BUTTONS */
+.tap-row{display:flex;gap:4px;flex-wrap:nowrap}
+.tap-btn{flex:1;height:38px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:'DM Sans',sans-serif}
+.tap-btn:active{transform:scale(0.94)}
+.tap-btn.sel-green{background:#0fa96e;border-color:#0fa96e;color:#fff}
+.tap-btn.sel-orange{background:#e8720c;border-color:#e8720c;color:#fff}
+.tap-btn.sel-red{background:#e03e3e;border-color:#e03e3e;color:#fff}
+.date-range-row{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin-bottom:12px;width:100%}
+</style>
+</head>
+<body>
+
+<!-- ONBOARDING -->
+<div id="onboarding-screen" style="display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#f0ddd0 0%,#f5ede6 100%);overflow-y:auto;padding:40px 24px 60px">
+  <div style="max-width:400px;margin:0 auto">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:48px;margin-bottom:12px">🩺</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:#3a1a0a;margin-bottom:6px">ME/CFS Monitoring</div>
+      <div style="font-size:13px;color:#a09080;line-height:1.5">Quelques informations pour personnaliser<br>votre expérience</div>
+    </div>
+
+    <div style="margin-bottom:18px">
+      <label style="font-size:11px;font-weight:700;color:#7a6a5a;display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Votre pseudo <span style="color:#c04820">*</span></label>
+      <input type="text" id="ob-pseudo" placeholder="ex: Fabrice" style="width:100%;background:#fff;border:1.5px solid #e4d0c4;border-radius:14px;padding:14px 18px;font-family:'DM Sans',sans-serif;font-size:15px;color:#3a1a0a;outline:none">
+    </div>
+
+    <div style="margin-bottom:18px">
+      <label style="font-size:11px;font-weight:700;color:#7a6a5a;display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Vous êtes <span style="color:#c04820">*</span></label>
+      <div style="display:flex;gap:8px">
+        <div id="ob-male" onclick="selectGender('male')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:13px;font-weight:700;color:#3a1a0a">Homme</div>
+        </div>
+        <div id="ob-female" onclick="selectGender('female')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:13px;font-weight:700;color:#3a1a0a">Femme</div>
+        </div>
+        <div id="ob-nonbinary" onclick="selectGender('nonbinary')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:13px;font-weight:700;color:#3a1a0a">Non binaire</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:18px">
+      <label style="font-size:11px;font-weight:700;color:#7a6a5a;display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Année de naissance <span style="color:#c04820">*</span></label>
+      <input type="number" id="ob-year" placeholder="ex: 1975" min="1920" max="2010" inputmode="numeric" style="width:100%;background:#fff;border:1.5px solid #e4d0c4;border-radius:14px;padding:14px 18px;font-family:'DM Sans',sans-serif;font-size:15px;color:#3a1a0a;outline:none">
+    </div>
+
+    <div style="margin-bottom:18px">
+      <label style="font-size:11px;font-weight:700;color:#7a6a5a;display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Pays</label>
+      <input type="text" id="ob-country" placeholder="ex: France" style="width:100%;background:#fff;border:1.5px solid #e4d0c4;border-radius:14px;padding:14px 18px;font-family:'DM Sans',sans-serif;font-size:15px;color:#3a1a0a;outline:none">
+    </div>
+
+    <div style="margin-bottom:28px">
+      <label style="font-size:11px;font-weight:700;color:#7a6a5a;display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Langue</label>
+      <div style="display:flex;gap:8px">
+        <div id="ob-fr" onclick="selectLang('fr')" style="flex:1;background:#e8f4f0;border:1.5px solid #2a8a70;border-radius:14px;padding:12px;text-align:center;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:13px;font-weight:700;color:#2a8a70">🇫🇷 Français</div>
+        </div>
+        <div id="ob-en" onclick="selectLang('en')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:14px;padding:12px;text-align:center;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:13px;font-weight:700;color:#3a1a0a">🇬🇧 English</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:28px">
+      <label style="font-size:11px;font-weight:700;color:#7a6a5a;display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Votre niveau de handicap actuel <span style="color:#c04820">*</span></label>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div id="ob-h-leger" onclick="selectHandicap('leger')" style="background:#fff;border:1.5px solid #e4d0c4;border-radius:12px;padding:12px 14px;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:12px;font-weight:700;color:#3a1a0a">🟡 Léger</div>
+          <div style="font-size:10px;color:#a09080;margin-top:2px">Je peux encore avoir une activité partielle</div>
+        </div>
+        <div id="ob-h-modere" onclick="selectHandicap('modere')" style="background:#fff;border:1.5px solid #e4d0c4;border-radius:12px;padding:12px 14px;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:12px;font-weight:700;color:#3a1a0a">🟠 Modéré</div>
+          <div style="font-size:10px;color:#a09080;margin-top:2px">Je suis principalement à domicile</div>
+        </div>
+        <div id="ob-h-severe" onclick="selectHandicap('severe')" style="background:#fff;border:1.5px solid #e4d0c4;border-radius:12px;padding:12px 14px;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:12px;font-weight:700;color:#3a1a0a">🔴 Sévère</div>
+          <div style="font-size:10px;color:#a09080;margin-top:2px">Je suis majoritairement alité(e)</div>
+        </div>
+        <div id="ob-h-tres_severe" onclick="selectHandicap('tres_severe')" style="background:#fff;border:1.5px solid #e4d0c4;border-radius:12px;padding:12px 14px;cursor:pointer;transition:all 0.15s">
+          <div style="font-size:12px;font-weight:700;color:#3a1a0a">⚫ Très sévère</div>
+          <div style="font-size:10px;color:#a09080;margin-top:2px">Je suis alité(e) en permanence</div>
+        </div>
+      </div>
+    </div>
+
+    <button onclick="completeOnboarding()" style="width:100%;background:#2a8a70;color:#fff;border:none;border-radius:14px;padding:16px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(42,138,112,0.3)">
+      Commencer →
+    </button>
+    <div id="ob-error" style="color:#c04820;font-size:12px;text-align:center;margin-top:12px;display:none">
+      Veuillez remplir les champs obligatoires (*)
+    </div>
+  </div>
+</div>
+
+<div class="header">
+  <h1 onclick="switchPage('home')" style="cursor:pointer">🩺 Suivi Santé</h1>
+  <span class="date-badge" id="headerDate"></span>
+</div>
+
+<!-- ACCUEIL -->
+<div class="page active" id="page-home">
+  <div style="padding:16px 16px 12px;background:linear-gradient(160deg,#f0ddd0 0%,#f5ede6 60%);min-height:calc(100vh - 60px)">
+    <div id="greeting-text" style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:#3a1a0a;margin-bottom:14px;line-height:1.2;min-height:28px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+
+      <div onclick="switchPage('journal')" class="home-card" style="background:#eaf4f1;border-radius:22px;padding:12px 12px 0;min-height:100px;cursor:pointer;overflow:hidden;position:relative;">
+        <div style="font-size:14px;font-weight:700;color:#1a6a54;margin-bottom:3px">Journal</div>
+        <div style="font-size:10px;color:#4a9a80;line-height:1.4">Données<br>quotidiennes</div>
+        <div style="position:absolute;bottom:4px;right:4px;opacity:0.9">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><rect x="6" y="8" width="22" height="28" rx="3" fill="#2a8a70" opacity="0.2"/><rect x="9" y="6" width="22" height="28" rx="3" fill="#2a8a70" opacity="0.25"/><line x1="13" y1="15" x2="25" y2="15" stroke="#1a6a54" stroke-width="1.5" stroke-linecap="round"/><line x1="13" y1="19" x2="25" y2="19" stroke="#1a6a54" stroke-width="1.5" stroke-linecap="round"/><line x1="13" y1="23" x2="20" y2="23" stroke="#1a6a54" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+      </div>
+
+      <div onclick="switchPage('activites')" class="home-card" style="background:#ede9f8;border-radius:22px;padding:12px 12px 0;min-height:100px;cursor:pointer;overflow:hidden;position:relative;">
+        <div style="font-size:14px;font-weight:700;color:#5040a0;margin-bottom:3px">Activités</div>
+        <div style="font-size:10px;color:#7a6ac0;line-height:1.4">Activités<br>du jour</div>
+        <div style="position:absolute;bottom:4px;right:4px;opacity:0.9">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="22" r="14" fill="#7060a0" opacity="0.15"/><circle cx="22" cy="22" r="9" fill="#7060a0" opacity="0.2"/><circle cx="22" cy="22" r="4" fill="#5040a0"/><line x1="22" y1="8" x2="22" y2="13" stroke="#5040a0" stroke-width="2.5" stroke-linecap="round"/></svg>
+        </div>
+      </div>
+
+      <div onclick="switchPage('traitements')" class="home-card" style="background:#fde9e2;border-radius:22px;padding:12px 12px 0;min-height:100px;cursor:pointer;overflow:hidden;position:relative;">
+        <div style="font-size:14px;font-weight:700;color:#a03010;margin-bottom:3px">Traitements</div>
+        <div style="font-size:10px;color:#c06040;line-height:1.4">Médicaments<br>du jour</div>
+        <div style="position:absolute;bottom:4px;right:4px;opacity:0.9">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><ellipse cx="22" cy="16" rx="6" ry="10" fill="#c04820" opacity="0.2"/><ellipse cx="22" cy="16" rx="6" ry="10" stroke="#a03010" stroke-width="1.5" fill="none"/><line x1="16" y1="16" x2="28" y2="16" stroke="#a03010" stroke-width="1.5"/><ellipse cx="22" cy="16" rx="6" ry="5" fill="#c04820" opacity="0.2" transform="translate(0,0)"/></svg>
+        </div>
+      </div>
+
+      <div onclick="switchPage('graphs')" class="home-card" style="background:#e5f7ee;border-radius:22px;padding:12px 12px 0;min-height:100px;cursor:pointer;overflow:hidden;position:relative;">
+        <div style="font-size:14px;font-weight:700;color:#1a6040;margin-bottom:3px">Graphiques</div>
+        <div style="font-size:10px;color:#4a9060;line-height:1.4">Tendances<br>& évolution</div>
+        <div style="position:absolute;bottom:4px;right:4px;opacity:0.9">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><rect x="8" y="24" width="6" height="10" rx="2" fill="#2a8050" opacity="0.3"/><rect x="17" y="18" width="6" height="16" rx="2" fill="#2a8050" opacity="0.5"/><rect x="26" y="12" width="6" height="22" rx="2" fill="#2a8050" opacity="0.9"/><line x1="8" y1="35" x2="34" y2="35" stroke="#1a6040" stroke-width="1.2"/></svg>
+        </div>
+      </div>
+
+      <div onclick="switchPage('pem')" class="home-card" style="background:#fef1dc;border-radius:22px;padding:12px 12px 0;min-height:100px;cursor:pointer;overflow:hidden;position:relative;">
+        <div style="font-size:14px;font-weight:700;color:#a06010;margin-bottom:3px">PEM</div>
+        <div style="font-size:10px;color:#c08030;line-height:1.4">Malaise<br>post-effort</div>
+        <div style="position:absolute;bottom:4px;right:4px;opacity:0.9">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><path d="M22 8 L36 32 H8 Z" fill="#c08020" opacity="0.2"/><path d="M22 8 L36 32 H8 Z" stroke="#a06010" stroke-width="1.5" fill="none" stroke-linejoin="round"/><line x1="22" y1="16" x2="22" y2="24" stroke="#a06010" stroke-width="2.5" stroke-linecap="round"/><circle cx="22" cy="28.5" r="1.8" fill="#a06010"/></svg>
+        </div>
+      </div>
+
+      <div onclick="switchPage('export')" class="home-card" style="background:#eef0f4;border-radius:22px;padding:12px 12px 0;min-height:100px;cursor:pointer;overflow:hidden;position:relative;">
+        <div style="font-size:14px;font-weight:700;color:#405060;margin-bottom:3px">Export</div>
+        <div style="font-size:10px;color:#708090;line-height:1.4">Télécharger<br>les données</div>
+        <div style="position:absolute;bottom:4px;right:4px;opacity:0.9">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><rect x="10" y="26" width="24" height="10" rx="3" fill="#607080" opacity="0.2"/><rect x="10" y="26" width="24" height="10" rx="3" stroke="#405060" stroke-width="1.5" fill="none"/><line x1="22" y1="8" x2="22" y2="24" stroke="#405060" stroke-width="2" stroke-linecap="round"/><polyline points="15,18 22,26 29,18" stroke="#405060" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <div onclick="switchPage('tension')" class="home-card" style="background:#fde8ec;border-radius:22px;padding:12px 12px 0;min-height:100px;cursor:pointer;overflow:hidden;position:relative;">
+        <div style="font-size:14px;font-weight:700;color:#900830;margin-bottom:3px">Cardio</div>
+        <div style="font-size:10px;color:#b04060;line-height:1.4">Tension<br>& fréquence</div>
+        <div style="position:absolute;bottom:4px;right:4px;opacity:0.9">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><path d="M22 30 C22 30 9 22 9 15 C9 10 13 8 17 8 C20 8 22 11 22 11 C22 11 24 8 27 8 C31 8 35 10 35 15 C35 22 22 30 22 30Z" fill="#b02040" opacity="0.2"/><path d="M22 30 C22 30 9 22 9 15 C9 10 13 8 17 8 C20 8 22 11 22 11 C22 11 24 8 27 8 C31 8 35 10 35 15 C35 22 22 30 22 30Z" stroke="#900830" stroke-width="1.5" fill="none"/><polyline points="11,17 15,17 17,13 19,21 21,15 22,17 25,17 27,19 29,17 33,17" stroke="#900830" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- JOURNAL -->
+<div class="page" id="page-journal">
+  <div class="page-pad">
+    <div class="page-header">
+      <div class="page-title">Journal</div>
+      <button class="btn btn-sm" onclick="switchPage('saisie')">+ Nouvelle saisie</button>
+    </div>
+    <div id="journal-list"></div>
+  </div>
+</div>
+
+<!-- SAISIE -->
+<div class="page" id="page-saisie">
+  <div class="page-pad">
+    <div class="page-header">
+      <div class="page-title">✏️ Saisie rapide</div>
+      <button class="btn btn-sm" onclick="switchPage('journal')">← Retour</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📅 Date</div>
+      <input type="date" class="form-input" id="saisie-date">
+    </div>
+
+    <!-- SOMMEIL -->
+    <div class="card">
+      <div class="card-title">🌙 Sommeil</div>
+      <div class="form-row">
+        <label class="form-label">Durée estimée (heures)</label>
+        <input type="number" class="form-input" id="in-sommeil" placeholder="ex: 6.5" min="0" max="24" step="0.5" inputmode="decimal">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Réveils nocturnes</label>
+        <div class="pm-row"><button class="pm-btn" onclick="pmChange('reveils',-1)">−</button><span class="pm-val" id="pm-reveils">0</span><button class="pm-btn" onclick="pmChange('reveils',1)">+</button></div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Qualité du sommeil (1–10)</label>
+        <div class="tap-row" id="tap-qsommeil"></div>
+        <input type="hidden" id="in-qsommeil">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Siestes</label>
+        <div class="pm-row"><button class="pm-btn" onclick="pmChange('siestes',-1)">−</button><span class="pm-val" id="pm-siestes">0</span><button class="pm-btn" onclick="pmChange('siestes',1)">+</button></div>
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Repos</label>
+        <div class="pm-row"><button class="pm-btn" onclick="pmChange('repos',-1)">−</button><span class="pm-val" id="pm-repos">0</span><button class="pm-btn" onclick="pmChange('repos',1)">+</button></div>
+      </div>
+    </div>
+
+    <!-- FORME — tap buttons -->
+    <div class="card">
+      <div class="card-title">⚡ Forme générale</div>
+      <div class="form-row">
+        <label class="form-label">Matin</label>
+        <div class="tap-row" id="tap-fmatin"></div>
+        <input type="hidden" id="in-fmatin">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Après-midi</label>
+        <div class="tap-row" id="tap-fmidi"></div>
+        <input type="hidden" id="in-fmidi">
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Soir</label>
+        <div class="tap-row" id="tap-fsoir"></div>
+        <input type="hidden" id="in-fsoir">
+      </div>
+    </div>
+
+    <!-- VERTIGES — tap buttons -->
+    <div class="card">
+      <div class="card-title">😵 Vertiges</div>
+      <div class="form-row">
+        <label class="form-label">Matin</label>
+        <div class="tap-row" id="tap-ematin"></div>
+        <input type="hidden" id="in-ematin">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Après-midi</label>
+        <div class="tap-row" id="tap-eam"></div>
+        <input type="hidden" id="in-eam">
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Soir</label>
+        <div class="tap-row" id="tap-esoir"></div>
+        <input type="hidden" id="in-esoir">
+      </div>
+    </div>
+
+    <!-- HUMEUR -->
+    <div class="card">
+      <div class="card-title">😊 Humeur</div>
+      <div class="form-row">
+        <label class="form-label">Matin</label>
+        <div class="tap-row" id="tap-hmatin"></div>
+        <input type="hidden" id="in-hmatin">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Après-midi</label>
+        <div class="tap-row" id="tap-ham"></div>
+        <input type="hidden" id="in-ham">
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Soir</label>
+        <div class="tap-row" id="tap-hsoir"></div>
+        <input type="hidden" id="in-hsoir">
+      </div>
+    </div>
+
+    <!-- ANGOISSE -->
+    <div class="card">
+      <div class="card-title">😰 Anxiété</div>
+      <div class="form-row">
+        <label class="form-label">Matin</label>
+        <div class="tap-row" id="tap-amatin"></div>
+        <input type="hidden" id="in-amatin">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Après-midi</label>
+        <div class="tap-row" id="tap-aam"></div>
+        <input type="hidden" id="in-aam">
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Soir</label>
+        <div class="tap-row" id="tap-asoir"></div>
+        <input type="hidden" id="in-asoir">
+      </div>
+    </div>
+
+    <!-- ACTIVITÉ -->
+    <div class="card">
+      <div class="card-title">🚶 Activité</div>
+      <div class="form-row">
+        <label class="form-label">Nombre de pas</label>
+        <input type="number" class="form-input" id="in-pas" placeholder="ex: 4500" min="0" step="100" inputmode="numeric">
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Cigarettes</label>
+        <div class="pm-row"><button class="pm-btn" onclick="pmChange('cigs',-1)">−</button><span class="pm-val" id="pm-cigs">0</span><button class="pm-btn" onclick="pmChange('cigs',1)">+</button></div>
+      </div>
+    </div>
+
+    <!-- COMMENTAIRE LIBRE -->
+    <div class="card">
+      <div class="card-title">💬 Commentaire libre</div>
+      <textarea id="in-commentaire" class="form-input" placeholder="Vos impressions sur la journée..." maxlength="2000" rows="4" style="resize:vertical;font-size:14px;line-height:1.5;font-family:'DM Sans',sans-serif"></textarea>
+      <div style="text-align:right;font-size:11px;color:var(--muted);margin-top:4px"><span id="commentaire-count">0</span> / 2000 caractères</div>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveEntry()">✅ Enregistrer la journée</button>
+    <div style="height:16px"></div>
+  </div>
+</div>
+
+<!-- PAGE: ACTIVITÉS DU JOUR -->
+<div class="page" id="page-activites">
+  <div class="page-pad">
+    <div class="page-title" style="margin-bottom:16px">Activités</div>
+
+    <div class="card">
+      <div class="card-title">📅 Date</div>
+      <input type="date" class="form-input" id="act-date">
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎯 Activités</div>
+      <div id="activity-tags" class="tag-list" style="margin-bottom:12px"></div>
+      <label class="form-label" style="margin-bottom:8px">Type d'activité</label>
+      <div class="tag-list" id="preset-frequent" style="margin-bottom:12px"></div>
+      <div style="margin-bottom:8px">
+        <span onclick="toggleOtherActs()" style="font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px">
+          <span id="other-acts-arrow">▶</span> Autres activités
+        </span>
+      </div>
+      <div class="tag-list" id="preset-others" style="margin-bottom:12px;display:none"></div>
+      <div style="margin-bottom:14px">
+        <input type="text" class="form-input" id="act-input" placeholder="Saisir une activité..." style="font-size:14px">
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <select class="form-input" id="act-heure" style="flex:1;font-size:13px"><option>Matin</option><option>Après-midi</option><option>Soir</option></select>
+        <div style="flex:1">
+          <input type="number" class="form-input" id="act-duree" placeholder="Durée (min)" min="1" style="font-size:13px;width:100%" inputmode="numeric">
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label class="form-label" style="margin-bottom:8px">Position</label>
+        <div style="display:flex;gap:8px">
+          <div id="pos-allonge" onclick="selectPosition('allonge')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:10px;padding:9px 6px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:#3a1a0a;transition:all 0.15s">
+            🛏️ Allongé
+          </div>
+          <div id="pos-assis" onclick="selectPosition('assis')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:10px;padding:9px 6px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:#3a1a0a;transition:all 0.15s">
+            🪑 Assis
+          </div>
+          <div id="pos-debout" onclick="selectPosition('debout')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:10px;padding:9px 6px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:#3a1a0a;transition:all 0.15s">
+            🧍 Debout
+          </div>
+        </div>
+        <input type="hidden" id="act-position">
+      </div>
+        <label class="form-label" style="margin-bottom:8px">A accru la fatigue ?</label>
+        <div style="display:flex;gap:8px">
+          <div id="accru-oui" onclick="selectAccru('oui')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:10px;padding:10px;text-align:center;cursor:pointer;font-size:13px;font-weight:600;color:#3a1a0a;transition:all 0.15s">
+            Oui
+          </div>
+          <div id="accru-non" onclick="selectAccru('non')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:10px;padding:10px;text-align:center;cursor:pointer;font-size:13px;font-weight:600;color:#3a1a0a;transition:all 0.15s">
+            Non
+          </div>
+          <div id="accru-nsp" onclick="selectAccru('nsp')" style="flex:1;background:#fff;border:1.5px solid #e4d0c4;border-radius:10px;padding:10px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:#a09080;transition:all 0.15s">
+            NSP
+          </div>
+        </div>
+        <input type="hidden" id="act-accru">
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveActivites()" style="background:#f97316">✅ Enregistrer les activités</button>
+
+    <!-- HISTORIQUE ACTIVITÉS -->
+    <div style="font-family:'DM Serif Display',serif;font-size:16px;margin:20px 0 12px">Historique</div>
+    <div id="activites-history"></div>
+    <div style="height:16px"></div>
+  </div>
+</div>
+
+<!-- GRAPHIQUES -->
+<div class="page" id="page-graphs">
+  <div class="page-pad">
+    <div class="page-title" style="margin-bottom:16px">Graphiques</div>
+
+    <div class="card">
+      <div class="card-title">Période</div>
+      <div class="date-range-row">
+        <input type="date" class="form-input" id="graph-date-from" style="font-size:13px;padding:8px 10px" onchange="renderGraph()">
+        <span style="color:var(--muted);font-size:13px;text-align:center">→</span>
+        <input type="date" class="form-input" id="graph-date-to" style="font-size:13px;padding:8px 10px" onchange="renderGraph()">
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="setDateRange(7)">7 jours</button>
+        <button class="btn btn-sm" onclick="setDateRange(14)">14 jours</button>
+        <button class="btn btn-sm" onclick="setDateRange(30)">30 jours</button>
+        <button class="btn btn-sm" onclick="setDateRange(0)">Tout</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Données à afficher</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="cb-pas" checked onchange="renderGraph()" style="width:18px;height:18px;accent-color:#5a9e80">
+          <span style="color:#5a9e80;font-weight:600">👟 Pas</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="cb-sommeil" onchange="renderGraph()" style="width:18px;height:18px;accent-color:#7080b0">
+          <span style="color:#7080b0;font-weight:600">🌙 Sommeil</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="cb-activites" onchange="renderGraph()" style="width:18px;height:18px;accent-color:#c07840">
+          <span style="color:#c07840;font-weight:600">🎯 Activités</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="cb-forme" onchange="renderGraph()" style="width:18px;height:18px;accent-color:#9080c0">
+          <span style="color:#9080c0;font-weight:600">⚡ Forme</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chart-wrap"><canvas id="mainChart"></canvas></div>
+    </div>
+    <div id="graph-stats"></div>
+  </div>
+</div>
+
+<!-- PEM -->
+<div class="page" id="page-pem">
+  <div class="page-pad">
+    <div class="page-title" style="margin-bottom:16px">PEM</div>
+
+    <!-- BOUTON AJOUTER/MODIFIER EN HAUT -->
+    <button class="btn btn-sm" onclick="openPemCalendar()" style="margin-bottom:12px">+ Ajouter / Modifier un épisode</button>
+
+    <!-- CALENDRIER PEM -->
+    <div id="pem-calendar-wrap" style="display:none;background:#fff;border:1.5px solid #e4d0c4;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 4px 14px rgba(150,60,20,0.1)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <button onclick="pemCalNav(-1)" style="background:none;border:none;font-size:22px;cursor:pointer;color:#a09080;padding:0 8px">‹</button>
+        <div id="pem-cal-title" style="font-size:14px;font-weight:700;color:#3a1a0a"></div>
+        <button onclick="pemCalNav(1)" style="background:none;border:none;font-size:22px;cursor:pointer;color:#a09080;padding:0 8px">›</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px">
+        <div style="text-align:center;font-size:9px;color:#a09080;font-weight:700">L</div>
+        <div style="text-align:center;font-size:9px;color:#a09080;font-weight:700">M</div>
+        <div style="text-align:center;font-size:9px;color:#a09080;font-weight:700">M</div>
+        <div style="text-align:center;font-size:9px;color:#a09080;font-weight:700">J</div>
+        <div style="text-align:center;font-size:9px;color:#a09080;font-weight:700">V</div>
+        <div style="text-align:center;font-size:9px;color:#a09080;font-weight:700">S</div>
+        <div style="text-align:center;font-size:9px;color:#a09080;font-weight:700">D</div>
+      </div>
+      <div id="pem-cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px"></div>
+
+      <div id="pem-cal-form" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <div id="pem-cal-date-label" style="font-size:12px;font-weight:700;color:#3a1a0a;margin-bottom:10px"></div>
+        <!-- Intensité -->
+        <div class="form-row">
+          <label class="form-label">Intensité (1–10)</label>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="pm-row"><button class="pm-btn" onclick="retroPemChange(-1)">−</button><span class="pm-val" id="retro-pm-pem">1</span><button class="pm-btn" onclick="retroPemChange(1)">+</button></div>
+            <span style="font-size:12px;color:var(--muted)">/10</span>
+          </div>
+        </div>
+        <!-- Symptômes existants -->
+        <div class="form-row">
+          <label class="form-label">Symptômes</label>
+          <div id="cal-existing-symptoms" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+          <div id="cal-symptom-tags" class="tag-list" style="margin-bottom:6px"></div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <input type="text" id="cal-pem-other" class="form-input" placeholder="Autre symptôme..." style="flex:1;font-size:13px">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-primary" onclick="saveRetroPem()" style="flex:1;background:#c04820">✅ Enregistrer</button>
+          <button class="btn btn-sm" onclick="closePemCalendar()" style="flex:1">Annuler</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FORMULAIRE SAISIE PEM DU JOUR -->
+    <div id="pem-form-wrap">
+    <div class="card" style="border-color:rgba(249,115,22,0.3)">
+      <div class="card-title">Saisir un épisode</div>
+      <div class="form-row">
+        <label class="form-label">Date</label>
+        <input type="date" class="form-input" id="pem-date">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Intensité (0 = aucun PEM)</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="pm-row"><button class="pm-btn" onclick="pmChangePem(-1)">−</button><span class="pm-val" id="pm-pem">0</span><button class="pm-btn" onclick="pmChangePem(1)">+</button></div>
+          <span style="font-size:12px;color:var(--muted)">/10</span>
+        </div>
+      </div>
+      <div id="pem-symptoms-wrap" style="display:none">
+        <label class="form-label" style="margin-bottom:10px;display:block">Symptômes associés</label>
+        <div class="tag-list" id="pem-symptom-tags">
+          <div class="tag" onclick="this.classList.toggle('selected')">Vertiges</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Oppression thoracique</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Symptômes gastriques</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Difficultés à respirer</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Sensibilité lumière</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Sensibilité son</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Maux de tête</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Douleurs musculaires</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Fatigue accrue</div>
+          <div class="tag" onclick="this.classList.toggle('selected')">Nausées</div>
+        </div>
+        <div class="form-row" style="margin-top:10px;margin-bottom:0">
+          <label class="form-label">Autre symptôme</label>
+          <input type="text" class="form-input" id="pem-other" placeholder="Préciser...">
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" onclick="savePem()" style="background:var(--warn)">✅ Enregistrer cet épisode</button>
+      </div>
+    </div>
+    </div>
+
+    <!-- ÉPISODE DU JOUR -->
+    <div id="pem-today" style="display:none"></div>
+
+    <!-- HISTORIQUE PEM -->
+    <div style="font-family:'DM Serif Display',serif;font-size:16px;margin:16px 0 12px">Historique</div>
+
+    <div id="pem-list"></div>
+  </div>
+</div>
+
+<!-- TRAITEMENTS -->
+<div class="page" id="page-traitements">
+  <div class="page-pad">
+    <div class="page-title" style="margin-bottom:16px">Traitements</div>
+
+    <div class="card">
+      <div class="card-title">📅 Date</div>
+      <input type="date" class="form-input" id="trait-date" onchange="checkYesterdayTraits()">
+      <div id="copy-yesterday-wrap" style="display:none;margin-top:10px;flex-direction:column;gap:8px">
+        <button class="btn btn-sm" onclick="copyYesterdayTraits()" style="width:100%;background:rgba(59,110,245,0.08);border-color:var(--accent);color:var(--accent)">
+          📋 Appliquer les traitements de la veille
+        </button>
+        <button class="btn btn-sm" onclick="editYesterdayTraits()" style="width:100%;background:rgba(232,114,12,0.08);border-color:var(--warn);color:var(--warn)">
+          ✏️ Modifier le traitement habituel
+        </button>
+      </div>
+    </div>
+
+    <!-- BLOC SAISIE — caché par défaut -->
+    <div id="trait-form-wrap" style="display:none">
+      <div class="card">
+        <div class="card-title">💊 Médicaments pris</div>
+        <div class="tag-list" id="trait-preset" style="margin-bottom:10px"></div>
+        <div id="trait-rows"></div>
+        <button class="btn btn-sm" onclick="addMedRow()" style="width:100%;margin-bottom:4px">+ Autre médicament</button>
+      </div>
+      <button class="btn btn-primary" onclick="saveTraitements()" style="background:#0e6aad">✅ Enregistrer les traitements</button>
+    </div>
+
+    <!-- Bouton nouvelle saisie -->
+    <button class="btn btn-sm" onclick="openTraitForm()" id="btn-new-trait" style="width:100%;margin-bottom:16px">+ Saisir les traitements du jour</button>
+
+    <div style="font-family:'DM Serif Display',serif;font-size:16px;margin:4px 0 12px">Historique</div>
+    <div id="traitements-history"></div>
+    <div style="height:16px"></div>
+  </div>
+</div>
+
+<!-- TENSION & FC -->
+<div class="page" id="page-tension">
+  <div class="page-pad">
+    <div class="page-title" style="margin-bottom:16px">Cardio</div>
+
+    <div class="card">
+      <div class="card-title">📅 Date</div>
+      <input type="date" class="form-input" id="tension-date">
+    </div>
+
+    <!-- MATIN -->
+    <div class="card" style="border-left:3px solid #b02040">
+      <div class="card-title">🌅 Matin</div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-end">
+        <div style="flex:1">
+          <label class="form-label">Tension systolique (mmHg)</label>
+          <input type="number" class="form-input" id="tens-sys-m" placeholder="ex: 120" min="50" max="250" step="0.01" inputmode="decimal">
+        </div>
+        <div style="font-size:20px;color:var(--muted);padding-bottom:10px">/</div>
+        <div style="flex:1">
+          <label class="form-label">Diastolique (mmHg)</label>
+          <input type="number" class="form-input" id="tens-dia-m" placeholder="ex: 80" min="30" max="150" step="0.01" inputmode="decimal">
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Fréquence cardiaque (bpm)</label>
+        <input type="number" class="form-input" id="tens-fc-m" placeholder="ex: 72" min="30" max="220" inputmode="numeric">
+      </div>
+    </div>
+
+    <!-- MIDI -->
+    <div class="card" style="border-left:3px solid #b02040">
+      <div class="card-title">☀️ Midi</div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-end">
+        <div style="flex:1">
+          <label class="form-label">Tension systolique (mmHg)</label>
+          <input type="number" class="form-input" id="tens-sys-mi" placeholder="ex: 120" min="50" max="250" step="0.01" inputmode="decimal">
+        </div>
+        <div style="font-size:20px;color:var(--muted);padding-bottom:10px">/</div>
+        <div style="flex:1">
+          <label class="form-label">Diastolique (mmHg)</label>
+          <input type="number" class="form-input" id="tens-dia-mi" placeholder="ex: 80" min="30" max="150" step="0.01" inputmode="decimal">
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Fréquence cardiaque (bpm)</label>
+        <input type="number" class="form-input" id="tens-fc-mi" placeholder="ex: 72" min="30" max="220" inputmode="numeric">
+      </div>
+    </div>
+
+    <!-- SOIR -->
+    <div class="card" style="border-left:3px solid #b02040">
+      <div class="card-title">🌙 Soir</div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-end">
+        <div style="flex:1">
+          <label class="form-label">Tension systolique (mmHg)</label>
+          <input type="number" class="form-input" id="tens-sys-s" placeholder="ex: 120" min="50" max="250" step="0.01" inputmode="decimal">
+        </div>
+        <div style="font-size:20px;color:var(--muted);padding-bottom:10px">/</div>
+        <div style="flex:1">
+          <label class="form-label">Diastolique (mmHg)</label>
+          <input type="number" class="form-input" id="tens-dia-s" placeholder="ex: 80" min="30" max="150" step="0.01" inputmode="decimal">
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Fréquence cardiaque (bpm)</label>
+        <input type="number" class="form-input" id="tens-fc-s" placeholder="ex: 72" min="30" max="220" inputmode="numeric">
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveTension()" style="background:#b02040">✅ Enregistrer</button>
+
+    <div style="font-family:'Cormorant Garamond',serif;font-size:16px;margin:20px 0 12px">Historique</div>
+    <div id="tension-history"></div>
+    <div style="height:16px"></div>
+  </div>
+</div>
+
+<!-- EXPORT -->
+<div class="page" id="page-export">
+  <div class="page-pad">
+    <div class="page-title" style="margin-bottom:20px">Export</div>
+
+    <div class="card" style="border-left:4px solid #2a8a70;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:6px">💾 Sauvegarder toutes mes données</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Journal, activités, traitements, PEM, tension — tout en un seul fichier.</div>
+      <button class="btn btn-primary" onclick="exportJSON()" style="width:100%;background:#2a8a70">💾 Télécharger la sauvegarde</button>
+    </div>
+
+    <div class="card" style="border-left:4px solid #7060a0;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:6px">📂 Restaurer une sauvegarde</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Restaure toutes vos données depuis un fichier de sauvegarde précédemment téléchargé.</div>
+      <button class="btn btn-sm" onclick="document.getElementById('import-json-input').click()" style="width:100%">📂 Choisir un fichier JSON</button>
+      <input type="file" id="import-json-input" accept=".json" style="display:none" onchange="importJSON(event)">
+    </div>
+
+    <div class="card" style="border-left:4px solid #c08020">
+      <div class="card-title" style="margin-bottom:6px">🔄 Sauvegardes automatiques</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Les 3 dernières sauvegardes sont conservées automatiquement.</div>
+      <div id="backups-list"></div>
+    </div>
+
+    <div style="height:16px"></div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="switchPage('home')" id="nav-home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Accueil
+  </button>
+  <button class="nav-btn" onclick="switchPage('journal')" id="nav-journal">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+    Journal
+  </button>
+  <button class="nav-btn" onclick="switchPage('activites')" id="nav-activites">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    Activités
+  </button>
+  <button class="nav-btn" onclick="switchPage('traitements')" id="nav-traitements">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    Traitements
+  </button>
+  <button class="nav-btn" onclick="switchPage('graphs')" id="nav-graphs">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Graphiques
+  </button>
+  <button class="nav-btn" onclick="switchPage('pem')" id="nav-pem">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    PEM
+  </button>
+  <button class="nav-btn" onclick="switchPage('tension')" id="nav-tension">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+    Tension
+  </button>
+</nav>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="detailModal" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title"></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const INITIAL={"journal": [], "activites": [], "pem": [], "traitements": []};
+
+let db=JSON.parse(localStorage.getItem('suivi_sante')||'null')||INITIAL;
+// Assure que toutes les clés existent même si absentes du localStorage
+if(!db.journal) db.journal=[];
+if(!db.activites) db.activites=[];
+if(!db.pem) db.pem=[];
+if(!db.traitements) db.traitements=[];
+if(!db.tension) db.tension=[];
+// Migration : Nuit -> Soir dans les traitements
+if(db.traitements) { db.traitements.forEach(t=>{ if(t.Moment==='Nuit') t.Moment='Soir'; }); localStorage.setItem('suivi_sante', JSON.stringify(db)); }
+let mainChart=null;
+function saveDB(){
+  localStorage.setItem('suivi_sante', JSON.stringify(db));
+  // Sauvegarde de secours horodatée (garde les 3 dernières)
+  const backups = JSON.parse(localStorage.getItem('suivi_sante_backups')||'[]');
+  backups.unshift({date: new Date().toISOString(), data: JSON.stringify(db)});
+  if(backups.length > 3) backups.pop();
+  localStorage.setItem('suivi_sante_backups', JSON.stringify(backups));
+}
+function today(){return new Date().toISOString().split('T')[0];}
+function formatDate(d){return new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});}
+function uid(){return Math.random().toString(36).substr(2,8);}
+function scoreColor(v,invert=false){if(v==null)return'#64748b';const n=parseFloat(v);if(invert){if(n<=3)return'#34d399';if(n<=6)return'#f97316';return'#f87171';}if(n>=7)return'#34d399';if(n>=4)return'#f97316';return'#f87171';}
+
+function switchPage(name){
+  const target = document.getElementById('page-'+name);
+  if(!target) return;
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  target.classList.add('active');
+  const nb=document.getElementById('nav-'+name);if(nb)nb.classList.add('active');
+  if(name==='activites')initActivites();
+  if(name==='traitements')initTraitements();
+  if(name==='journal')renderJournal();
+  if(name==='saisie'){initSaisie();}
+  if(name==='graphs'){ setDateRange(14); }
+  if(name==='export') renderBackups();
+  if(name==='pem')renderPem();
+  if(name==='tension')initTension();
+}
+
+// ============================================================
+// TRAITEMENTS
+// ============================================================
+
+function openTraitForm(date){
+  document.getElementById('trait-form-wrap').style.display = 'block';
+  document.getElementById('btn-new-trait').style.display = 'none';
+  document.getElementById('trait-rows').innerHTML = buildMedRow(true);
+  if(date) document.getElementById('trait-date').value = date;
+  renderTraitPresets();
+}
+
+function editYesterdayTraits(){
+  const date = document.getElementById('trait-date').value;
+  if (!date) return;
+  const d = new Date(date + 'T12:00:00');
+  d.setDate(d.getDate() - 1);
+  const yesterday = d.toISOString().split('T')[0];
+  // Get yesterday's treatments as a template — don't delete them
+  const traits = (db.traitements||[]).filter(t=>t.Lien_Date===yesterday);
+  if (!traits.length) { showToast('❌ Aucun traitement la veille', true); return; }
+  // Open form pre-filled with yesterday's data, but date stays on today
+  document.getElementById('trait-form-wrap').style.display = 'block';
+  document.getElementById('btn-new-trait').style.display = 'none';
+  const container = document.getElementById('trait-rows');
+  container.innerHTML = '';
+  traits.forEach((t, i) => {
+    const div = document.createElement('div');
+    div.innerHTML = buildMedRowEditable();
+    const row = div.firstElementChild;
+    row.querySelector('.trait-name').value = t.Medicament;
+    row.querySelector('.trait-moment').value = t.Moment || 'Matin';
+    const qtySelect = row.querySelector('.trait-qty');
+    if (qtySelect) {
+      const qty = t.Dose ? t.Dose.replace(/[^0-9.]/g,'') : '1';
+      [...qtySelect.options].forEach(o => { if(o.value===qty) o.selected=true; });
+    }
+    container.appendChild(row);
+  });
+  renderTraitPresets();
+  showToast('📋 Base de la veille chargée — modifie puis enregistre pour le ' + date);
+}
+
+function loadTraitsForEdit(date){
+  const traits = (db.traitements||[]).filter(t=>t.Lien_Date===date);
+  if (!traits.length) return;
+  db.traitements = db.traitements.filter(t=>t.Lien_Date!==date);
+  document.getElementById('trait-form-wrap').style.display = 'block';
+  document.getElementById('btn-new-trait').style.display = 'none';
+  document.getElementById('trait-date').value = date;
+  window.scrollTo(0,0);
+  document.getElementById('page-traitements').scrollTop = 0;
+  const container = document.getElementById('trait-rows');
+  container.innerHTML = '';
+  traits.forEach((t, i) => {
+    const div = document.createElement('div');
+    // All rows get a delete button when editing
+    div.innerHTML = buildMedRowEditable();
+    const row = div.firstElementChild;
+    row.querySelector('.trait-name').value = t.Medicament;
+    row.querySelector('.trait-moment').value = t.Moment || 'Matin';
+    const qtySelect = row.querySelector('.trait-qty');
+    if (qtySelect) {
+      const qty = t.Dose ? t.Dose.replace(/[^0-9.]/g,'') : '1';
+      [...qtySelect.options].forEach(o => { if(o.value===qty) o.selected=true; });
+    }
+    container.appendChild(row);
+  });
+  renderTraitPresets();
+  showToast('📋 Traitements chargés — modifie puis enregistre');
+}
+
+function checkYesterdayTraits(){
+  const date = document.getElementById('trait-date').value;
+  if (!date) return;
+  const d = new Date(date + 'T12:00:00');
+  d.setDate(d.getDate() - 1);
+  const yesterday = d.toISOString().split('T')[0];
+  const yesterdayTraits = (db.traitements||[]).filter(t=>t.Lien_Date===yesterday);
+  const wrap = document.getElementById('copy-yesterday-wrap');
+  wrap.style.display = yesterdayTraits.length ? 'flex' : 'none';
+  wrap.style.flexDirection = 'column';
+}
+
+function copyYesterdayTraits(){
+  const date = document.getElementById('trait-date').value;
+  if (!date) return;
+  const d = new Date(date + 'T12:00:00');
+  d.setDate(d.getDate() - 1);
+  const yesterday = d.toISOString().split('T')[0];
+  const yesterdayTraits = (db.traitements||[]).filter(t=>t.Lien_Date===yesterday);
+  if (!yesterdayTraits.length) return;
+  document.getElementById('trait-form-wrap').style.display = 'block';
+  document.getElementById('btn-new-trait').style.display = 'none';
+  const container = document.getElementById('trait-rows');
+  container.innerHTML = '';
+  yesterdayTraits.forEach((t, i) => {
+    const div = document.createElement('div');
+    div.innerHTML = buildMedRow(i===0);
+    const row = div.firstElementChild;
+    row.querySelector('.trait-name').value = t.Medicament;
+    row.querySelector('.trait-moment').value = t.Moment || 'Matin';
+    const qtySelect = row.querySelector('.trait-qty');
+    if (qtySelect) {
+      const qty = t.Dose ? t.Dose.replace(/[^0-9.]/g,'') : '1';
+      [...qtySelect.options].forEach(o => { if(o.value===qty) o.selected=true; });
+    }
+    container.appendChild(row);
+  });
+  renderTraitPresets();
+  showToast('📋 Traitements de la veille copiés !');
+}
+
+function initTraitements(){
+  document.getElementById('trait-date').value = today();
+  document.getElementById('trait-form-wrap').style.display = 'none';
+  document.getElementById('btn-new-trait').style.display = 'block';
+  document.getElementById('trait-rows').innerHTML = buildMedRow(true);
+  checkYesterdayTraits();
+  renderTraitPresets();
+  renderTraitementsHistory();
+}
+
+function buildMedRow(isFirst){
+  const qtyOptions = [];
+  for(let i=0.5; i<=10; i+=0.5) qtyOptions.push(`<option value="${i}">${i}</option>`);
+  return `<div class="trait-row" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+    <div style="margin-bottom:8px${isFirst?'':';display:flex;gap:8px;align-items:flex-start'}">
+      <div class="autocomplete-wrap" style="flex:1;position:relative">
+        <input type="text" class="form-input trait-name" placeholder="Nom du médicament..." style="font-size:14px;width:100%" oninput="searchMed(this)" autocomplete="off">
+        <div class="autocomplete-list"></div>
+      </div>
+      ${isFirst?'':'<button onclick="this.closest(\'.trait-row\').remove()" style="background:none;border:none;color:var(--bad);font-size:22px;cursor:pointer;padding:4px;margin-top:4px">×</button>'}
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <select class="form-input trait-moment" style="flex:1;font-size:13px;min-width:100px">
+        <option>Matin</option><option>Midi</option><option>Soir</option><option>Au coucher</option>
+      </select>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap">Gélules :</span>
+        <select class="form-input trait-qty" style="width:80px;font-size:14px;font-weight:600">
+          ${qtyOptions.join('')}
+        </select>
+      </div>
+    </div>
+  </div>`;
+}
+
+function addMedRow(){
+  const div = document.createElement('div');
+  div.innerHTML = buildMedRow(false);
+  document.getElementById('trait-rows').appendChild(div.firstElementChild);
+}
+
+function saveTraitements(){
+  const date = document.getElementById('trait-date').value;
+  if(!date){showToast('❌ Sélectionne une date',true);return;}
+  if(!db.traitements) db.traitements=[];
+
+  const rows = document.querySelectorAll('.trait-row');
+  let added = 0;
+  rows.forEach(row => {
+    const name = row.querySelector('.trait-name').value.trim();
+    const qtyEl = row.querySelector('.trait-qty');
+    const qty = qtyEl ? qtyEl.value.trim() : '1';
+    const moment = row.querySelector('.trait-moment').value;
+    if(!name) return;
+    const known = db.traitements.some(t=>t.Lien_Date==='__custom__' && t.Medicament.trim().toLowerCase()===name.toLowerCase());
+    if(!known) db.traitements.push({ID:uid(), Lien_Date:'__custom__', Medicament:name, Dose:'', Moment:''});
+    db.traitements.push({ID:uid(), Lien_Date:date, Medicament:name, Dose:qty+' gélule(s)', Moment:moment});
+    added++;
+  });
+
+  if(!added){showToast('❌ Aucun médicament saisi',true);return;}
+  saveDB();
+  showToast('✅ Traitements enregistrés !');
+  document.getElementById('trait-form-wrap').style.display = 'none';
+  document.getElementById('btn-new-trait').style.display = 'block';
+  renderTraitementsHistory();
+}
+
+let medSearchTimer = null;
+
+function searchMed(input) {
+  const q = input.value.trim();
+  const list = input.parentElement.querySelector('.autocomplete-list');
+  if (q.length < 3) { list.classList.remove('open'); list.innerHTML=''; return; }
+  clearTimeout(medSearchTimer);
+  medSearchTimer = setTimeout(() => {
+    fetch(`https://medicaments-api.giygas.dev/v1/medicaments?search=${encodeURIComponent(q)}&limit=8`)
+      .then(r => r.json())
+      .then(data => {
+        // Handle all possible response structures
+        let items = [];
+        if (Array.isArray(data)) items = data;
+        else if (Array.isArray(data.data)) items = data.data;
+        else if (Array.isArray(data.medicaments)) items = data.medicaments;
+        else if (Array.isArray(data.results)) items = data.results;
+        else if (typeof data === 'object') items = Object.values(data).find(v => Array.isArray(v)) || [];
+
+        // Trier : ceux qui commencent par q en premier
+        items.sort((a, b) => {
+          const na = (a.denomination||a.elementPharmaceutique||a.nom||a.name||'').toLowerCase();
+          const nb = (b.denomination||b.elementPharmaceutique||b.nom||b.name||'').toLowerCase();
+          const ql = q.toLowerCase();
+          return (nb.startsWith(ql)?1:0) - (na.startsWith(ql)?1:0);
+        });
+
+        if (!items.length) { list.classList.remove('open'); return; }
+
+        list.innerHTML = items.slice(0,8).map(m => {
+          // Extract medication name from all possible structures
+          let fullName = '';
+          if (typeof m === 'string') {
+            fullName = m;
+          } else {
+            // Try all known field names
+            fullName = m.denomination || m.elementPharmaceutique || m.nom ||
+                      m.name || m.libelle || m.label || m.specialite ||
+                      m.denominationMedicament || m.nomMedicament || '';
+            // If still empty, try nested objects
+            if (!fullName && m.medicament) fullName = m.medicament.denomination || m.medicament.nom || '';
+            if (!fullName) {
+              // Take first string value found
+              for (const val of Object.values(m)) {
+                if (typeof val === 'string' && val.length > 2) { fullName = val; break; }
+              }
+            }
+          }
+          if (!fullName) return '';
+          const brand = fullName.split(' ')[0];
+          const rest = fullName.substring(brand.length).trim().substring(0, 40);
+          const safeFullName = fullName.replace(/'/g,"&#39;").replace(/"/g,'&quot;');
+          return `<div class="autocomplete-item" onclick="selectMed(this.closest('.autocomplete-wrap').querySelector('.trait-name'),'${safeFullName}')">
+            <strong>${brand}</strong>${rest ? ` <span style="color:var(--muted);font-size:11px">${rest}</span>` : ''}
+          </div>`;
+        }).filter(Boolean).join('');
+        list.classList.add('open');
+      })
+      .catch(() => { list.classList.remove('open'); });
+  }, 350);
+}
+
+function selectMed(input, name) {
+  input.value = name;
+  const list = input.parentElement.querySelector('.autocomplete-list');
+  list.classList.remove('open');
+  list.innerHTML = '';
+  // Move focus to moment field
+  const row = input.closest('.trait-row');
+  if (row) row.querySelector('.trait-moment').focus();
+}
+
+// Close autocomplete when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.autocomplete-wrap')) {
+    document.querySelectorAll('.autocomplete-list').forEach(l => l.classList.remove('open'));
+  }
+});
+
+function changeQty(btn, delta) {
+  const qtyEl = btn.closest('.pm-row').querySelector('.trait-qty');
+  let val = parseInt(qtyEl.textContent) + delta;
+  val = Math.max(1, Math.min(10, val));
+  qtyEl.textContent = val;
+}
+
+function buildMedRowEditable(){
+  const qtyOptions = [];
+  for(let i=0.5; i<=10; i+=0.5) qtyOptions.push('<option value="'+i+'">'+i+'</option>');
+  const html = '<div class="trait-row" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">'
+    + '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:flex-start">'
+    + '<div class="autocomplete-wrap" style="flex:1;position:relative">'
+    + '<input type="text" class="form-input trait-name" placeholder="Nom du médicament..." style="font-size:14px;width:100%" oninput="searchMed(this)" autocomplete="off">'
+    + '<div class="autocomplete-list"></div></div>'
+    + '<button onclick="this.closest(\'.trait-row\').remove()" style="background:none;border:none;color:var(--bad);font-size:22px;cursor:pointer;padding:4px;margin-top:4px">×</button>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    + '<select class="form-input trait-moment" style="flex:1;font-size:13px;min-width:100px">'
+    + '<option>Matin</option><option>Midi</option><option>Soir</option><option>Au coucher</option>'
+    + '</select>'
+    + '<div style="display:flex;align-items:center;gap:6px">'
+    + '<span style="font-size:12px;color:var(--muted);white-space:nowrap">Gélules :</span>'
+    + '<select class="form-input trait-qty" style="width:80px;font-size:14px;font-weight:600">'
+    + qtyOptions.join('') + '</select></div></div></div>';
+  return html;
+}
+
+function getTraitFrequencies(){
+  const counts = {};
+  (db.traitements||[]).filter(t=>t.Lien_Date!=='__custom__').forEach(t=>{
+    const name = t.Medicament.trim();
+    counts[name] = (counts[name]||0) + 1;
+  });
+  // Dédoublonnage insensible à la casse
+  const seen = [];
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])
+    .filter(e=>{ const l=e[0].toLowerCase(); if(seen.includes(l))return false; seen.push(l); return true; })
+    .map(e=>e[0]);
+}
+
+function renderTraitPresets(){
+  const el = document.getElementById('trait-preset');
+  if(!el) return;
+  const all = getTraitFrequencies();
+  el.innerHTML = all.slice(0,14).map(name=>
+    `<div class="tag" onclick="fillTraitName('${name.replace(/'/g,"&#39;")}')">${name}</div>`
+  ).join('');
+}
+
+function fillTraitName(name){
+  const fields = document.querySelectorAll('.trait-name');
+  for(let f of fields){
+    if(!f.value.trim()){ f.value=name; return; }
+  }
+  addMedRow();
+  setTimeout(()=>{
+    const fields2 = document.querySelectorAll('.trait-name');
+    fields2[fields2.length-1].value = name;
+  }, 50);
+}
+
+function getTraitFrequencies(){
+  const counts = {};
+  (db.traitements||[]).filter(t=>t.Lien_Date!=='__custom__').forEach(t=>{
+    const name = t.Medicament.trim();
+    counts[name] = (counts[name]||0) + 1;
+  });
+  const seen = [];
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])
+    .filter(e=>{ const l=e[0].toLowerCase(); if(seen.includes(l))return false; seen.push(l); return true; })
+    .map(e=>e[0]);
+}
+
+function renderTraitementsHistory(){
+  const wrap = document.getElementById('traitements-history');
+  if(!wrap) return;
+  const byDate = {};
+  (db.traitements||[]).filter(t=>t.Lien_Date && t.Lien_Date!=='__custom__').forEach(t=>{
+    if(!byDate[t.Lien_Date]) byDate[t.Lien_Date]=[];
+    byDate[t.Lien_Date].push(t);
+  });
+  const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  if(!dates.length){wrap.innerHTML='<div class="empty">Aucun traitement enregistré</div>';return;}
+  wrap.innerHTML = dates.map(date=>`
+    <div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:12px;color:var(--muted)">${formatDate(date)}</div>
+        <button class="btn btn-sm" onclick="loadTraitsForEdit('${date}')" style="font-size:11px;padding:4px 10px">✏️ Modifier</button>
+      </div>
+      <div class="tag-list">${byDate[date].slice().sort((a,b)=>{
+        const o={'Matin':0,'Midi':1,'Soir':2,'Au coucher':3};
+        return (o[a.Moment]??4)-(o[b.Moment]??4);
+      }).map(t=>`
+        <div class="tag" style="background:#f5ede6;border-color:#e4d0c4;color:#3a1a0a">
+          💊 ${t.Medicament}${t.Dose?' · '+t.Dose:''}${t.Moment?' · '+t.Moment:''}
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function initActivites(){
+  document.getElementById('act-date').value = today();
+  newActs = [];
+  renderActTags();
+  renderActivityPresets();
+  renderActivitesHistorique();
+}
+
+function saveActivites(){
+  const date = document.getElementById('act-date').value;
+  if (!date) { showToast('❌ Sélectionne une date', true); return; }
+  // Auto-add what's currently in the input field
+  const currentName = document.getElementById('act-input').value.trim();
+  if (currentName) addActivity();
+  if (!newActs.length) { showToast('❌ Aucune activité saisie', true); return; }
+  newActs.forEach(a => {
+    db.activites.push({ID_Activite:a.id, Lien_Date:date, Nature_Activite:a.name,
+      Heure:a.heure, 'Durée (min)':a.duree||null, 'A accru la fatigue':a.accru||null, 'Position':a.position||null});
+  });
+  editingActDate = null;
+  saveDB();
+  showToast('✅ Activités enregistrées !');
+  newActs = [];
+  renderActTags();
+  renderActivitesHistorique();
+}
+
+function renderActivitesHistorique(){
+  const wrap = document.getElementById('activites-history');
+  if (!wrap) return;
+  // Group activites by date, exclude __custom__
+  const byDate = {};
+  db.activites.filter(a=>a.Lien_Date && a.Lien_Date !== '__custom__').forEach(a=>{
+    if (!byDate[a.Lien_Date]) byDate[a.Lien_Date] = [];
+    byDate[a.Lien_Date].push(a);
+  });
+  const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  if (!dates.length) { wrap.innerHTML='<div class="empty">Aucune activité enregistrée</div>'; return; }
+  wrap.innerHTML = dates.map(date => {
+    // Compute total effort load for the day
+    const heureOrder = {'Matin':0,'Après-midi':1,'Soir':2};
+    const dayActs = byDate[date].sort((a,b)=>(heureOrder[a.Heure]??3)-(heureOrder[b.Heure]??3));
+    const totalMins = dayActs.reduce((s,a) => s + (parseInt(a['Durée (min)'])||0), 0);
+    const avgEffort = dayActs.filter(a=>a['Effort']).length
+      ? (dayActs.reduce((s,a)=>s+(a['Effort']||0),0) / dayActs.filter(a=>a['Effort']).length).toFixed(1)
+      : null;
+    return `<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:12px;color:var(--muted)">${formatDate(date)}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${totalMins ? `<span style="font-size:11px;background:#f5ede6;border:1px solid #e4d0c4;border-radius:6px;padding:2px 7px;color:#3a1a0a">⏱ ${totalMins} min</span>` : ''}
+          ${avgEffort ? `<span style="font-size:11px;background:#fff0e8;border:1px solid #f5c8a0;border-radius:6px;padding:2px 7px;color:var(--warn)">💪 ${avgEffort}/10</span>` : ''}
+          <button class="btn btn-sm" onclick="editActivites('${date}')" style="font-size:11px;padding:4px 10px">✏️ Modifier</button>
+        </div>
+      </div>
+      <div class="tag-list">${dayActs.map(a => {
+        const posIcon = a['Position']==='allonge'?'🛏️':a['Position']==='assis'?'🪑':a['Position']==='debout'?'🧍':'';
+        const accruIcon = a['A accru la fatigue']==='oui'?'⚠️':a['A accru la fatigue']==='non'?'✅':'';
+        const infos = [a['Durée (min)']?a['Durée (min)']+'min':null, posIcon, accruIcon].filter(Boolean).join(' ');
+        return `<div class="tag">${a.Heure==='Matin'?'🌅':a.Heure==='Après-midi'?'☀️':'🌙'} ${a.Nature_Activite}${infos?` <span style="opacity:0.65;font-size:10px">(${infos})</span>`:''}</div>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+let editingActDate = null;
+
+function editActivites(date){
+  const existing = db.activites.filter(a=>a.Lien_Date===date);
+  if(!existing.length) return;
+  document.getElementById('act-date').value = date;
+  editingActDate = date;
+  db.activites = db.activites.filter(a=>a.Lien_Date!==date);
+  newActs = existing.map(a=>({
+    id: a.ID_Activite, name: a.Nature_Activite, heure: a.Heure,
+    epuisement: a.Durée||null, duree: a['Durée (min)']||null, effort: a['Effort']||null
+  }));
+  renderActTags();
+  renderActivitesHistorique();
+  document.getElementById('page-activites').scrollTop = 0;
+  window.scrollTo(0,0);
+  showToast('📋 Activités chargées — modifie puis enregistre');
+}
+
+function renderJournal(){
+  const sorted=[...db.journal].sort((a,b)=>b.Date.localeCompare(a.Date));
+  document.getElementById('journal-list').innerHTML=sorted.length===0?'<div class="empty">Aucune entrée</div>':sorted.map(e=>{
+    const pem=db.pem.find(p=>p.Lien_Date===e.Date);
+    const acts=db.activites.filter(a=>a.Lien_Date===e.Date);
+    const forme=e['Forme journée']||e['Forme Matin'];
+    return`<div class="history-item" onclick="showDetail('${e.Date}')" style="cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="history-date">${formatDate(e.Date)}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${pem?`<span class="pem-badge">PEM ${pem['Intensité']||pem['Intensity']||'?'}</span>`:''}
+          <button class="btn btn-sm" onclick="event.stopPropagation();editEntry('${e.Date}')" style="font-size:11px;padding:4px 10px">✏️ Modifier</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px">
+        <div class="score-badge"><div class="dot" style="background:${scoreColor(forme)}"></div>Forme ${forme??'—'}</div>
+        <div class="score-badge">💤 ${e['Durée sommeil nocturne']??'—'}h</div>
+        <div class="score-badge">👟 ${e['Pas']!=null?Math.round(e['Pas']):(e['Pas (hundreds)']!=null?Math.round(e['Pas (hundreds)']*100):'—')}</div>
+        <div class="score-badge">🎯 ${acts.length||'—'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showDetail(date){
+  const e=db.journal.find(j=>j.Date===date);
+  const pem=db.pem.find(p=>p.Lien_Date===date);
+  const acts=db.activites.filter(a=>a.Lien_Date===date);
+  document.getElementById('modal-title').textContent=formatDate(date);
+  document.getElementById('modal-body').innerHTML=`
+    <div class="detail-row"><span class="key">Sleep</span><span class="val">${e['Durée sommeil nocturne']??'—'}h · Quality ${e['Quality Sleep']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Siestes</span><span class="val">${e['Siestes (Nb)']??'—'}</span></div>
+    <div class="detail-row"><span class="key">Repos</span><span class="val">${e['Repos (Nb)']??'—'}</span></div>
+    <div class="detail-row"><span class="key">Matin condition</span><span class="val" style="color:${scoreColor(e['Forme Matin'])}">${e['Forme Matin']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Après-midi condition</span><span class="val" style="color:${scoreColor(e['Forme Midi'])}">${e['Forme Midi']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Soir condition</span><span class="val" style="color:${scoreColor(e['Forme Soir'])}">${e['Forme Soir']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Vertiges matin</span><span class="val" style="color:${scoreColor(e['Etourdissement matin'],true)}">${e['Etourdissement matin']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Vertiges après-midi</span><span class="val" style="color:${scoreColor(e['Etourdissement AM'],true)}">${e['Etourdissement AM']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Vertiges soir</span><span class="val" style="color:${scoreColor(e['Etourdissement Soir'],true)}">${e['Etourdissement Soir']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Humeur matin</span><span class="val" style="color:${scoreColor(e['Humeur Matin'])}">${e['Humeur Matin']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Humeur après-midi</span><span class="val" style="color:${scoreColor(e['Humeur AM'])}">${e['Humeur AM']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Humeur soir</span><span class="val" style="color:${scoreColor(e['Humeur Soir'])}">${e['Humeur Soir']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Anxiété matin</span><span class="val" style="color:${scoreColor(e['Anxiété Matin'],true)}">${e['Anxiété Matin']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Anxiété après-midi</span><span class="val" style="color:${scoreColor(e['Anxiété AM'],true)}">${e['Anxiété AM']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Anxiété soir</span><span class="val" style="color:${scoreColor(e['Anxiété Soir'],true)}">${e['Anxiété Soir']??'—'}/10</span></div>
+    <div class="detail-row"><span class="key">Pas</span><span class="val">${e['Pas']!=null?Math.round(e['Pas']):(e['Pas (hundreds)']!=null?Math.round(e['Pas (hundreds)']*100):'—')}</span></div>
+    
+    <div class="detail-row"><span class="key">Cigarettes</span><span class="val">${e['Cigarettes']??'—'}</span></div>
+    ${e['Commentaire']?`<div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:10px;border-left:3px solid var(--accent)">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600">💬 COMMENTAIRE</div>
+      <div style="font-size:13px;color:var(--text);line-height:1.5">${e['Commentaire']}</div>
+    </div>`:''}
+    ${(()=>{
+      const t = (db.tension||[]).find(t=>t.Date===date);
+      if (!t) return '';
+      const row = (label, sys, dia, fc) => (sys||fc) ? `<div class="detail-row">
+        <span class="key">${label}</span>
+        <span class="val" style="font-size:12px">
+          ${sys&&dia?`<b>${sys}/${dia}</b> mmHg`:sys?`<b>${sys}</b> mmHg`:''}
+          ${fc?`&nbsp;♥ <b>${fc}</b>`:''}</span></div>` : '';
+      return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div class="card-title" style="margin-bottom:6px">Cardio</div>
+        ${row('🌅 Matin', t.sys_m, t.dia_m, t.fc_m)}
+        ${row('☀️ Midi', t.sys_mi, t.dia_mi, t.fc_mi)}
+        ${row('🌙 Soir', t.sys_s, t.dia_s, t.fc_s)}
+      </div>`;
+    })()}
+    ${pem?`<div style="background:rgba(249,115,22,0.07);border:1px solid rgba(249,115,22,0.25);border-radius:12px;padding:12px;margin-top:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${pem['symptomes associés']?'10px':'0'}">
+        <span style="font-size:12px;color:var(--muted)">PEM</span>
+        <span class="pem-badge">Intensity ${pem['Intensité']||pem['Intensity']||'?'}/10</span>
+      </div>
+      ${pem['symptomes associés']?`<div class="tag-list">${pem['symptomes associés'].split(',').map(s=>s.trim()).filter(s=>s).map(s=>`<div class="tag" style="background:rgba(249,115,22,0.15);border-color:rgba(249,115,22,0.3);color:var(--warn);cursor:default">${s}</div>`).join('')}</div>`:''}
+    </div>`:''}
+    ${acts.length?`<div style="margin-top:12px"><div class="card-title">Activités</div><div class="tag-list">${acts.map(a=>`<div class="tag">${a.Heure==='Matin'?'🌅':a.Heure==='Après-midi'?'☀️':'🌙'} ${a.Nature_Activite}${a['Durée']?` <span style="opacity:0.7;font-size:10px">(${a['Durée']})</span>`:''}</div>`).join('')}</div></div>`:''}
+    <div style="margin-top:16px">
+      <button class="btn btn-primary" onclick="editEntry('${date}')">✏️ Modifier cette journée</button>
+    </div>
+    <div style="height:12px"></div>`;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function editEntry(date) {
+  const modal = document.getElementById('detailModal');
+  if (modal && modal.classList.contains('open')) closeModal();
+
+  const e = db.journal.find(j=>j.Date===date);
+  const acts = db.activites.filter(a=>a.Lien_Date===date && a.Lien_Date!=='__custom__');
+  if (!e) return;
+
+  // Navigate to saisie WITHOUT calling initSaisie (which would reset everything)
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-saisie').classList.add('active');
+  const nb = document.getElementById('nav-journal');
+  if(nb) nb.classList.add('active');
+
+  // Scroll to top
+  window.scrollTo(0,0);
+  document.getElementById('page-saisie').scrollTop = 0;
+
+  // Init tap rows
+  initAllTapRows();
+
+  // Fill form
+  document.getElementById('saisie-date').value = date;
+  if(e['Durée sommeil nocturne']!=null) document.getElementById('in-sommeil').value=e['Durée sommeil nocturne'];
+  if(e['Heure lever']) 
+  
+  if(e['Qualité Sommeil']!=null) document.getElementById('in-qsommeil').value = e['Qualité Sommeil'];
+  else if(e['Quality Sleep']!=null) document.getElementById('in-qsommeil').value = e['Quality Sleep'];
+  if(e['Forme Matin']!=null) setTapValue('tap-fmatin','in-fmatin',e['Forme Matin'],false);
+  if(e['Forme Midi']!=null) setTapValue('tap-fmidi','in-fmidi',e['Forme Midi'],false);
+  if(e['Forme Soir']!=null) setTapValue('tap-fsoir','in-fsoir',e['Forme Soir'],false);
+  if(e['Etourdissement matin']!=null) setTapValue('tap-ematin','in-ematin',e['Etourdissement matin'],true);
+  if(e['Etourdissement AM']!=null) setTapValue('tap-eam','in-eam',e['Etourdissement AM'],true);
+  if(e['Etourdissement Soir']!=null) setTapValue('tap-esoir','in-esoir',e['Etourdissement Soir'],true);
+  if(e['Humeur Matin']!=null) setTapValue('tap-hmatin','in-hmatin',e['Humeur Matin'],false,'humeur');
+  if(e['Humeur AM']!=null) setTapValue('tap-ham','in-ham',e['Humeur AM'],false,'humeur');
+  if(e['Humeur Soir']!=null) setTapValue('tap-hsoir','in-hsoir',e['Humeur Soir'],false,'humeur');
+  if(e['Anxiété Matin']!=null) setTapValue('tap-amatin','in-amatin',e['Anxiété Matin'],true);
+  if(e['Anxiété AM']!=null) setTapValue('tap-aam','in-aam',e['Anxiété AM'],true);
+  if(e['Anxiété Soir']!=null) setTapValue('tap-asoir','in-asoir',e['Anxiété Soir'],true);
+  const pas = e['Pas'] ?? (e['Pas']!=null ? Math.round(e['Pas']*100) : null) ?? (e['Pas (hundreds)']!=null ? Math.round(e['Pas (hundreds)']*100) : null);
+  if(pas!=null) document.getElementById('in-pas').value = Math.round(pas);
+  pmVals.siestes = e['Siestes (Nb)']||0;
+  pmVals.reveils = e['Réveils nocturnes']||0;
+  pmVals.repos = e['Repos (Nb)']||0;
+  pmVals.cigs = e['Cigarettes']||0;
+  ['siestes','repos','cigs'].forEach(f=>{
+    const el = document.getElementById('pm-'+f);
+    if(el) el.textContent = pmVals[f];
+  });
+  newActs = acts.map(a=>({id:a.ID_Activite, name:a.Nature_Activite, heure:a.Heure, epuisement:a['Durée']||null}));
+  renderActTags();
+  // Commentaire
+  const commentaire = e['Commentaire']||'';
+  document.getElementById('in-commentaire').value = commentaire;
+  document.getElementById('commentaire-count').textContent = commentaire.length;
+  showToast('📋 Données chargées — modifie puis enregistre');
+}
+
+function closeModal(){document.getElementById('detailModal').classList.remove('open');}
+
+let pmVals={siestes:0,repos:0,sorties:0,cigs:0,reveils:0};
+let pemInt=0;
+let newActs=[];
+
+// TAP BUTTON FIELDS
+const TAP_FIELDS = ['fmatin','fmidi','fsoir','ematin','eam','esoir'];
+
+// Forme : 1 = mauvais (rouge), 10 = bon (vert)
+function tapColor(val) {
+  if (val >= 7) return 'sel-green';
+  if (val >= 4) return 'sel-orange';
+  return 'sel-red';
+}
+
+function tapColorVertiges(val) {
+  if (val <= 3) return 'sel-green';
+  if (val <= 6) return 'sel-orange';
+  return 'sel-red';
+}
+
+// Humeur : 1 = mauvais (rouge), 10 = bon (vert)
+function tapColorHumeur(val) {
+  if (val >= 7) return 'sel-green';
+  if (val >= 4) return 'sel-orange';
+  return 'sel-red';
+}
+
+function initTapRow(containerId, hiddenId, isVertiges, mode) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  for (let i = 1; i <= 10; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'tap-btn';
+    btn.textContent = i;
+    btn.type = 'button';
+    btn.onclick = () => selectTap(containerId, hiddenId, i, isVertiges, mode);
+    container.appendChild(btn);
+  }
+}
+
+function selectTap(containerId, hiddenId, val, isVertiges, mode) {
+  document.getElementById(hiddenId).value = val;
+  const btns = document.querySelectorAll(`#${containerId} .tap-btn`);
+  btns.forEach((btn, i) => {
+    btn.className = 'tap-btn';
+    if (i + 1 === val) {
+      const col = mode==='humeur' ? tapColorHumeur(val) : isVertiges ? tapColorVertiges(val) : tapColor(val);
+      btn.classList.add(col);
+    }
+  });
+}
+
+function setTapValue(containerId, hiddenId, val, isVertiges, mode) {
+  if (val == null) return;
+  document.getElementById(hiddenId).value = val;
+  const btns = document.querySelectorAll(`#${containerId} .tap-btn`);
+  btns.forEach((btn, i) => {
+    btn.className = 'tap-btn';
+    if (i + 1 === parseInt(val)) {
+      const col = mode==='humeur' ? tapColorHumeur(parseInt(val)) : isVertiges ? tapColorVertiges(parseInt(val)) : tapColor(parseInt(val));
+      btn.classList.add(col);
+    }
+  });
+}
+
+function initAllTapRows() {
+  initTapRow('tap-fmatin', 'in-fmatin', false);
+  initTapRow('tap-fmidi',  'in-fmidi',  false);
+  initTapRow('tap-fsoir',  'in-fsoir',  false);
+  initTapRow('tap-ematin', 'in-ematin', true);
+  initTapRow('tap-eam',    'in-eam',    true);
+  initTapRow('tap-esoir',  'in-esoir',  true);
+  initTapRow('tap-hmatin', 'in-hmatin', false, 'humeur');
+  initTapRow('tap-ham',    'in-ham',    false, 'humeur');
+  initTapRow('tap-hsoir',  'in-hsoir',  false, 'humeur');
+  initTapRow('tap-amatin', 'in-amatin', true);
+  initTapRow('tap-aam',    'in-aam',    true);
+  initTapRow('tap-asoir',  'in-asoir',  true);
+}
+
+function pmChange(f,d){const max={siestes:10,repos:20,sorties:10,cigs:60,reveils:15};pmVals[f]=Math.max(0,Math.min(max[f]||99,pmVals[f]+d));document.getElementById('pm-'+f).textContent=pmVals[f];}
+function pmChangePem(d){pemInt=Math.max(0,Math.min(10,pemInt+d));document.getElementById('pm-pem').textContent=pemInt;document.getElementById('pem-symptoms-wrap').style.display=pemInt>0?'block':'none';}
+
+// ══════════════════════════════════════════
+// TENSION & FC
+// ══════════════════════════════════════════
+function initTension(){
+  document.getElementById('tension-date').value = today();
+  // Check if entry exists for today
+  const existing = (db.tension||[]).find(t=>t.Date===today());
+  if (existing) {
+    ['m','mi','s'].forEach(slot => {
+      const s = existing['sys_'+slot]; const d = existing['dia_'+slot]; const fc = existing['fc_'+slot];
+      if(s) document.getElementById('tens-sys-'+slot).value = s;
+      if(d) document.getElementById('tens-dia-'+slot).value = d;
+      if(fc) document.getElementById('tens-fc-'+slot).value = fc;
+    });
+  } else {
+    ['tens-sys-m','tens-dia-m','tens-fc-m','tens-sys-mi','tens-dia-mi','tens-fc-mi','tens-sys-s','tens-dia-s','tens-fc-s']
+      .forEach(id => document.getElementById(id).value = '');
+  }
+  renderTensionHistory();
+}
+
+function saveTension(){
+  const date = document.getElementById('tension-date').value;
+  if (!date) { showToast('❌ Sélectionne une date', true); return; }
+
+  const entry = {
+    Date: date,
+    sys_m:  parseFloat(document.getElementById('tens-sys-m').value)||null,
+    dia_m:  parseFloat(document.getElementById('tens-dia-m').value)||null,
+    fc_m:   parseFloat(document.getElementById('tens-fc-m').value)||null,
+    sys_mi: parseFloat(document.getElementById('tens-sys-mi').value)||null,
+    dia_mi: parseFloat(document.getElementById('tens-dia-mi').value)||null,
+    fc_mi:  parseFloat(document.getElementById('tens-fc-mi').value)||null,
+    sys_s:  parseFloat(document.getElementById('tens-sys-s').value)||null,
+    dia_s:  parseFloat(document.getElementById('tens-dia-s').value)||null,
+    fc_s:   parseFloat(document.getElementById('tens-fc-s').value)||null,
+  };
+
+  if (!entry.sys_m && !entry.sys_mi && !entry.sys_s) {
+    showToast('❌ Saisir au moins une mesure', true); return;
+  }
+
+  if (!db.tension) db.tension = [];
+  db.tension = db.tension.filter(t=>t.Date!==date);
+  db.tension.push(entry);
+  saveDB();
+  showToast('✅ Tension enregistrée !');
+  renderTensionHistory();
+}
+
+function tensionBadge(sys, dia, fc){
+  let html = '';
+  if (sys && dia) {
+    const color = sys >= 140 || dia >= 90 ? '#e03e3e' : sys >= 130 || dia >= 80 ? '#e8720c' : '#0fa96e';
+    html += `<span style="font-size:11px;background:${color}20;border:1px solid ${color}40;color:${color};border-radius:6px;padding:2px 8px;font-weight:600">${sys}/${dia}</span> `;
+  }
+  if (fc) html += `<span style="font-size:11px;background:#b0204020;border:1px solid #b0204040;color:#b02040;border-radius:6px;padding:2px 8px;font-weight:600">♥ ${fc}</span>`;
+  return html;
+}
+
+function renderTensionHistory(){
+  const wrap = document.getElementById('tension-history');
+  if (!wrap) return;
+  const data = (db.tension||[]).sort((a,b)=>b.Date.localeCompare(a.Date));
+  if (!data.length) { wrap.innerHTML = '<div class="empty">Aucune mesure enregistrée</div>'; return; }
+  wrap.innerHTML = data.map(t=>`
+    <div class="card" style="margin-bottom:10px;border-left:3px solid #b02040">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:12px;color:var(--muted)">${formatDate(t.Date)}</div>
+        <button class="btn btn-sm" onclick="editTension('${t.Date}')" style="font-size:11px;padding:4px 10px">✏️ Modifier</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${t.sys_m||t.fc_m ? `<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--muted);width:40px">🌅 Mat.</span>${tensionBadge(t.sys_m,t.dia_m,t.fc_m)}</div>` : ''}
+        ${t.sys_mi||t.fc_mi ? `<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--muted);width:40px">☀️ Midi</span>${tensionBadge(t.sys_mi,t.dia_mi,t.fc_mi)}</div>` : ''}
+        ${t.sys_s||t.fc_s ? `<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--muted);width:40px">🌙 Soir</span>${tensionBadge(t.sys_s,t.dia_s,t.fc_s)}</div>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function editTension(date){
+  document.getElementById('tension-date').value = date;
+  const t = (db.tension||[]).find(t=>t.Date===date);
+  if (!t) return;
+  ['m','mi','s'].forEach(slot=>{
+    document.getElementById('tens-sys-'+slot).value = t['sys_'+slot]||'';
+    document.getElementById('tens-dia-'+slot).value = t['dia_'+slot]||'';
+    document.getElementById('tens-fc-'+slot).value = t['fc_'+slot]||'';
+  });
+  window.scrollTo(0,0);
+  showToast('📋 Mesures chargées — modifie puis enregistre');
+}
+
+let positionVal = null;
+function selectPosition(p){
+  positionVal = p;
+  ['allonge','assis','debout'].forEach(id=>{
+    const el = document.getElementById('pos-'+id);
+    if(!el) return;
+    const sel = p===id;
+    el.style.background = sel ? '#e8f4f0' : '#fff';
+    el.style.borderColor = sel ? '#2a8a70' : '#e4d0c4';
+    el.style.color = sel ? '#2a8a70' : '#3a1a0a';
+  });
+  document.getElementById('act-position').value = p;
+}
+
+// ── V2 — ACCRU FATIGUE ───────────────────────────────────
+let accruVal = null;
+function selectAccru(v){
+  accruVal = v;
+  ['oui','non','nsp'].forEach(id=>{
+    const el = document.getElementById('accru-'+id);
+    if(!el) return;
+    const isSelected = v===id;
+    el.style.background = isSelected ? (v==='oui'?'#fde8e0':v==='non'?'#e8f4f0':'#f0ede8') : '#fff';
+    el.style.borderColor = isSelected ? (v==='oui'?'#c04820':v==='non'?'#2a8a70':'#a09080') : '#e4d0c4';
+    el.style.color = isSelected ? (v==='oui'?'#c04820':v==='non'?'#2a8a70':'#a09080') : '#3a1a0a';
+  });
+  document.getElementById('act-accru').value = v;
+}
+
+// ── V2 — CALCUL DURÉE SOMMEIL ─────────────────────────────
+function calcSommeil(){
+  const coucher = document.getElementById('in-heure-coucher').value;
+  const lever = document.getElementById('in-heure-lever').value;
+  const el = document.getElementById('sommeil-calcule');
+  if(!coucher || !lever || !el) return;
+  const [ch, cm] = coucher.split(':').map(Number);
+  const [lh, lm] = lever.split(':').map(Number);
+  let mins = (lh*60+lm) - (ch*60+cm);
+  if(mins < 0) mins += 24*60; // nuit qui passe minuit
+  const h = Math.floor(mins/60);
+  const m = mins%60;
+  el.textContent = `${h}h${m>0?String(m).padStart(2,'0'):''}`;
+  el.style.color = mins < 300 ? '#c04820' : mins < 420 ? '#c08020' : '#2a8a70';
+}
+
+function initSaisie(){
+  document.getElementById('saisie-date').value=today();
+  
+  
+  
+  initTapRow('tap-qsommeil','in-qsommeil',false);
+  document.getElementById('in-qsommeil').value='';
+  document.getElementById('in-pas').value='';
+  document.getElementById('in-commentaire').value='';
+  document.getElementById('commentaire-count').textContent='0';
+  pmVals={siestes:0,repos:0,sorties:0,cigs:0,reveils:0};
+  ['siestes','repos','sorties','cigs','reveils'].forEach(f=>{
+    const el=document.getElementById('pm-'+f);
+    if(el) el.textContent='0';
+  });
+  pemInt=0;
+  newActs=[];
+  initAllTapRows();
+
+  // Si une entrée existe déjà pour aujourd'hui, la charger
+  const existing = db.journal.find(j=>j.Date===today());
+  if(existing){
+    if(existing['Durée sommeil nocturne']!=null) document.getElementById('in-sommeil').value=existing['Durée sommeil nocturne'];
+    if(existing['Qualité Sommeil']!=null) setTapValue('tap-qsommeil','in-qsommeil',existing['Qualité Sommeil'],false);
+    if(existing['Qualité Sommeil']!=null) document.getElementById('in-qsommeil').value=existing['Qualité Sommeil'];
+    if(existing['Forme Matin']!=null) setTapValue('tap-fmatin','in-fmatin',existing['Forme Matin'],false);
+    if(existing['Forme Midi']!=null) setTapValue('tap-fmidi','in-fmidi',existing['Forme Midi'],false);
+    if(existing['Forme Soir']!=null) setTapValue('tap-fsoir','in-fsoir',existing['Forme Soir'],false);
+    if(existing['Etourdissement matin']!=null) setTapValue('tap-ematin','in-ematin',existing['Etourdissement matin'],true);
+    if(existing['Etourdissement AM']!=null) setTapValue('tap-eam','in-eam',existing['Etourdissement AM'],true);
+    if(existing['Etourdissement Soir']!=null) setTapValue('tap-esoir','in-esoir',existing['Etourdissement Soir'],true);
+    if(existing['Humeur Matin']!=null) setTapValue('tap-hmatin','in-hmatin',existing['Humeur Matin'],false,'humeur');
+    if(existing['Humeur AM']!=null) setTapValue('tap-ham','in-ham',existing['Humeur AM'],false,'humeur');
+    if(existing['Humeur Soir']!=null) setTapValue('tap-hsoir','in-hsoir',existing['Humeur Soir'],false,'humeur');
+    if(existing['Anxiété Matin']!=null) setTapValue('tap-amatin','in-amatin',existing['Anxiété Matin'],true);
+    if(existing['Anxiété AM']!=null) setTapValue('tap-aam','in-aam',existing['Anxiété AM'],true);
+    if(existing['Anxiété Soir']!=null) setTapValue('tap-asoir','in-asoir',existing['Anxiété Soir'],true);
+    const pas = existing['Pas']??existing['Pas (centaines)']??existing['Pas (hundreds)'];
+    if(pas!=null) document.getElementById('in-pas').value=Math.round(pas);
+    pmVals.siestes=existing['Siestes (Nb)']||0;
+    pmVals.reveils=existing['Réveils nocturnes']||0;
+    pmVals.repos=existing['Repos (Nb)']||0;
+    pmVals.cigs=existing['Cigarettes']||0;
+    ['siestes','reveils','repos','cigs'].forEach(f=>{const el=document.getElementById('pm-'+f);if(el)el.textContent=pmVals[f];});
+    const c=existing['Commentaire']||'';
+    document.getElementById('in-commentaire').value=c;
+    document.getElementById('commentaire-count').textContent=c.length;
+  }
+}
+
+function getActivityFrequencies() {
+  const counts = {};
+  db.activites.forEach(a => { counts[a.Nature_Activite] = (counts[a.Nature_Activite]||0) + 1; });
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+}
+
+function renderActivityPresets() {
+  const TOP_N = 14;
+  const all = getActivityFrequencies();
+  const frequent = all.slice(0, TOP_N);
+  const others = all.slice(TOP_N);
+  document.getElementById('preset-frequent').innerHTML =
+    frequent.map(name=>`<div class="tag" onclick="selectPreset(this.dataset.name)" data-name="${name.replace(/"/g,'&quot;')}">${name}</div>`).join('');
+  document.getElementById('preset-others').innerHTML =
+    others.length ? others.map(name=>`<div class="tag" onclick="selectPreset(this.dataset.name)" data-name="${name.replace(/"/g,'&quot;')}">${name}</div>`).join('')
+    : '<span style="font-size:12px;color:var(--muted)">Aucune autre activité</span>';
+}
+
+function toggleOtherActs() {
+  const el = document.getElementById('preset-others');
+  const arrow = document.getElementById('other-acts-arrow');
+  if (el.style.display === 'none') { el.style.display='flex'; arrow.textContent='▼'; }
+  else { el.style.display='none'; arrow.textContent='▶'; }
+}
+
+function getActFields() {
+  return {
+    heure: document.getElementById('act-heure').value,
+    duree: document.getElementById('act-duree').value ? parseInt(document.getElementById('act-duree').value) : null,
+    accru: document.getElementById('act-accru').value || null,
+    position: document.getElementById('act-position').value || null
+  };
+}
+
+function clearActFields() {
+  document.getElementById('act-duree').value = '';
+  document.getElementById('act-accru').value = '';
+  document.getElementById('act-position').value = '';
+  accruVal = null;
+  positionVal = null;
+  ['oui','non','nsp'].forEach(id=>{
+    const el = document.getElementById('accru-'+id);
+    if(el){ el.style.background='#fff'; el.style.borderColor='#e4d0c4'; el.style.color=id==='nsp'?'#a09080':'#3a1a0a'; }
+  });
+  ['allonge','assis','debout'].forEach(id=>{
+    const el = document.getElementById('pos-'+id);
+    if(el){ el.style.background='#fff'; el.style.borderColor='#e4d0c4'; el.style.color='#3a1a0a'; }
+  });
+}
+
+function selectPreset(name){
+  document.getElementById('act-input').value = name;
+}
+
+function addActivity(){
+  const input=document.getElementById('act-input');
+  const name=input.value.trim();
+  if(!name)return;
+  const f = getActFields();
+  const known = db.activites.some(a=>a.Nature_Activite===name);
+  if(!known) db.activites.push({ID_Activite:uid(),Lien_Date:'__custom__',Nature_Activite:name,Heure:f.heure,Durée:null});
+  newActs.push({id:uid(), name, heure:f.heure, duree:f.duree, accru:f.accru, position:f.position});
+  input.value='';
+  clearActFields();
+  renderActTags();
+  renderActivityPresets();
+}
+
+document.getElementById('act-input').addEventListener('keydown',e=>{if(e.key==='Enter')addActivity();});
+
+function renderActTags(){
+  document.getElementById('activity-tags').innerHTML=newActs.map((a,i)=>{
+    const posLabel = a.position==='allonge'?'🛏️':a.position==='assis'?'🪑':a.position==='debout'?'🧍':'';
+    const accruLabel = a.accru==='oui'?'⚠️ accru':a.accru==='non'?'✅ ok':'';
+    const infos = [a.duree?a.duree+' min':null, posLabel, accruLabel].filter(Boolean).join(' · ');
+    return `<div class="tag selected" style="display:flex;align-items:center;gap:6px;width:100%;margin-bottom:4px">
+      <span style="flex:1">${a.heure==='Matin'?'🌅':a.heure==='Après-midi'?'☀️':'🌙'} ${a.name}${infos?` <span style="opacity:0.65;font-size:10px">(${infos})</span>`:''}</span>
+      <span onclick="loadActForEdit(${i})" style="cursor:pointer;font-size:13px;padding:0 4px">✏️</span>
+      <span class="remove" onclick="newActs.splice(${i},1);renderActTags()">×</span>
+    </div>`;
+  }).join('');
+}
+
+function loadActForEdit(i){
+  const a = newActs[i];
+  document.getElementById('act-input').value = a.name;
+  document.getElementById('act-heure').value = a.heure||'Matin';
+  document.getElementById('act-duree').value = a.duree||'';
+  if(a.accru) selectAccru(a.accru);
+  if(a.position) selectPosition(a.position);
+  newActs.splice(i,1);
+  renderActTags();
+  document.getElementById('act-input').focus();
+  showToast('✏️ Modifie puis re-ajoute l\'activité');
+}
+
+function getSymptomes(){
+  const sel=[...document.querySelectorAll('#pem-symptom-tags .tag.selected')].map(t=>t.textContent.trim());
+  const other=document.getElementById('pem-other').value.trim();
+  if(other)sel.push(other);
+  // Dédoublonner en ignorant la casse
+  const seen=[];
+  const deduped=sel.filter(s=>{
+    const low=s.toLowerCase();
+    if(seen.includes(low))return false;
+    seen.push(low);return true;
+  });
+  return deduped.join(', ')||null;
+}
+
+function saveEntry(){
+  const date=document.getElementById('saisie-date').value;
+  if(!date){showToast('❌ Sélectionne une date',true);return;}
+  db.journal=db.journal.filter(j=>j.Date!==date);
+  db.activites=db.activites.filter(a=>a.Lien_Date!==date);
+  db.pem=db.pem.filter(p=>p.Lien_Date!==date);
+  const fmatin=parseFloat(document.getElementById('in-fmatin').value)||null;
+  const fmidi=parseFloat(document.getElementById('in-fmidi').value)||null;
+  const fsoir=parseFloat(document.getElementById('in-fsoir').value)||null;
+  const vals=[fmatin,fmidi,fsoir].filter(v=>v!=null);
+  const fj=vals.length?parseFloat((vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1)):null;
+  const pas=parseFloat(document.getElementById('in-pas').value)||null;
+  // V2 — heure coucher/lever et durée calculée
+  db.journal.push({"Date":date,
+    "Durée sommeil nocturne":parseFloat(document.getElementById('in-sommeil').value)||null,
+    "Qualité Sommeil":parseFloat(document.getElementById('in-qsommeil').value)||null,
+    "Forme Matin":fmatin,"Forme Midi":fmidi,"Forme Soir":fsoir,"Forme journée":fj,
+    "Etourdissement matin":parseFloat(document.getElementById('in-ematin').value)||null,
+    "Etourdissement AM":parseFloat(document.getElementById('in-eam').value)||null,
+    "Etourdissement Soir":parseFloat(document.getElementById('in-esoir').value)||null,
+    "Humeur Matin":parseFloat(document.getElementById('in-hmatin').value)||null,
+    "Humeur AM":parseFloat(document.getElementById('in-ham').value)||null,
+    "Humeur Soir":parseFloat(document.getElementById('in-hsoir').value)||null,
+    "Anxiété Matin":parseFloat(document.getElementById('in-amatin').value)||null,
+    "Anxiété AM":parseFloat(document.getElementById('in-aam').value)||null,
+    "Anxiété Soir":parseFloat(document.getElementById('in-asoir').value)||null,
+    "Siestes (Nb)":pmVals.siestes,"Repos (Nb)":pmVals.repos,"Réveils nocturnes":pmVals.reveils,
+    "Nombre de sorties":pmVals.sorties||null,
+    "Pas":pas,"Cigarettes":pmVals.cigs,"Commentaire":document.getElementById('in-commentaire').value.trim()||null});
+  db.journal.sort((a,b)=>a.Date.localeCompare(b.Date));
+  newActs.forEach(a=>db.activites.push({
+    ID_Activite:a.id, Lien_Date:date, Nature_Activite:a.name,
+    Heure:a.heure, 'Durée (min)':a.duree||null, 'A accru la fatigue':a.accru||null, 'Position':a.position||null
+  }));
+  if(pemInt>0)db.pem.push({ID_Activite:uid(),Lien_Date:date,Intensity:pemInt,Heure:'Journée entière','symptomes associés':getSymptomes()});
+  saveDB();
+  showToast('✅ Journée enregistrée !');
+  setTimeout(()=>switchPage('journal'),800);
+}
+
+function setDateRange(days) {
+  const allDates = [...db.journal].map(j => j.Date).sort();
+  if (!allDates.length) return;
+  const firstDate = allDates[0];
+  const lastDate = allDates[allDates.length - 1];
+
+  // Set min/max on both inputs
+  ['graph-date-from', 'graph-date-to'].forEach(id => {
+    const el = document.getElementById(id);
+    el.min = firstDate;
+    el.max = lastDate;
+  });
+
+  let from;
+  if (days === 0) {
+    from = firstDate;
+  } else {
+    const d = new Date(lastDate + 'T12:00:00');
+    d.setDate(d.getDate() - days + 1);
+    const candidate = d.toISOString().split('T')[0];
+    from = candidate < firstDate ? firstDate : candidate;
+  }
+  document.getElementById('graph-date-from').value = from;
+  document.getElementById('graph-date-to').value = lastDate;
+  renderGraph();
+}
+
+function renderGraph(){
+  const from = document.getElementById('graph-date-from').value;
+  const to = document.getElementById('graph-date-to').value;
+  let sorted = [...db.journal].sort((a,b) => a.Date.localeCompare(b.Date));
+  if (from) sorted = sorted.filter(d => d.Date >= from);
+  if (to) sorted = sorted.filter(d => d.Date <= to);
+  const labels=sorted.map(d=>formatDate(d.Date));
+  const datasets=[];
+
+  if(document.getElementById('cb-pas').checked){
+    datasets.push({label:'👟 Pas',data:sorted.map(d=>{
+      if(d['Pas']!=null) return d['Pas'];
+      if(d['Pas (centaines)']!=null) return Math.round(d['Pas (centaines)']*100);
+      if(d['Pas (hundreds)']!=null) return Math.round(d['Pas (hundreds)']*100);
+      return null;
+    }),borderColor:'#5a9e80',backgroundColor:'rgba(90,158,128,0.08)',tension:0.3,fill:false,borderWidth:1.5,pointRadius:2,yAxisID:'yPas'});
+  }
+  if(document.getElementById('cb-sommeil').checked){
+    datasets.push({label:'Sommeil (h)',data:sorted.map(d=>d['Durée sommeil nocturne']),borderColor:'#7080b0',tension:0.3,fill:false,borderWidth:1.5,pointRadius:2,yAxisID:'y'});
+  }
+  if(document.getElementById('cb-activites').checked){
+    datasets.push({label:'Nb activités',data:sorted.map(d=>db.activites.filter(a=>a.Lien_Date===d.Date).length),borderColor:'#c07840',backgroundColor:'rgba(192,120,64,0.08)',tension:0.3,fill:false,borderWidth:1.5,pointRadius:2,yAxisID:'y'});
+  }
+  if(document.getElementById('cb-forme').checked){
+    datasets.push({label:'Forme journée',data:sorted.map(d=>d['Forme journée']),borderColor:'#9080c0',tension:0.3,fill:false,borderWidth:1.5,pointRadius:2,yAxisID:'y'});
+  }
+
+  if(mainChart && typeof mainChart.destroy === 'function') mainChart.destroy();
+  mainChart = null;
+  if(datasets.length===0){
+    document.getElementById('graph-stats').innerHTML='<div class="empty">Sélectionne au moins une donnée</div>';
+    return;
+  }
+  document.getElementById('graph-stats').innerHTML='';
+
+  mainChart=new Chart(document.getElementById('mainChart').getContext('2d'),{
+    type:'line',
+    data:{labels,datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#1a2332',font:{size:10},boxWidth:12,padding:8}}},
+      scales:{
+        x:{ticks:{color:'#7a8fa8',font:{size:9},maxRotation:45},grid:{color:'#e8eef4'}},
+        y:{ticks:{color:'#7a8fa8',font:{size:10}},grid:{color:'#e8eef4'},min:0,max:10,position:'left'},
+        yPas:{ticks:{color:'#5a9e80',font:{size:9}},grid:{display:false},position:'right',beginAtZero:true}
+      },
+      spanGaps:true
+    }
+  });
+}
+
+// Liste de base des symptômes prédéfinis
+const BASE_SYMPTOMS = ['Vertiges','Oppression thoracique','Symptômes gastriques','Difficultés à respirer','Sensibilité lumière','Sensibilité son','Maux de tête','Douleurs musculaires','Fatigue accrue','Nausées'];
+
+function rebuildSymptomTags(selectedList) {
+  const container = document.getElementById('pem-symptom-tags');
+  const allSymptoms = [...BASE_SYMPTOMS, ...(db.customSymptoms||[])];
+  container.innerHTML = allSymptoms.map(sym => {
+    const isSelected = selectedList && selectedList.toLowerCase().includes(sym.toLowerCase());
+    return `<div class="tag${isSelected?' selected':''}" onclick="this.classList.toggle('selected')">${sym}</div>`;
+  }).join('');
+}
+
+// ── CALENDRIER PEM ───────────────────────────────────────
+let pemCalYear, pemCalMonth, pemCalSelectedDate = null, retroPemInt = 1;
+
+function openPemCalendar(){
+  const now = new Date();
+  pemCalYear = now.getFullYear();
+  pemCalMonth = now.getMonth();
+  pemCalSelectedDate = null;
+  document.getElementById('pem-cal-form').style.display = 'none';
+  document.getElementById('pem-calendar-wrap').style.display = 'block';
+  renderPemCalendar();
+}
+
+function closePemCalendar(){
+  document.getElementById('pem-calendar-wrap').style.display = 'none';
+  document.getElementById('pem-cal-form').style.display = 'none';
+}
+
+function pemCalNav(dir){
+  const now = new Date();
+  const minDate = new Date(now.getFullYear(), now.getMonth()-2, 1);
+  const newMonth = pemCalMonth + dir;
+  const newYear = pemCalYear + (newMonth < 0 ? -1 : newMonth > 11 ? 1 : 0);
+  const adjMonth = ((newMonth % 12) + 12) % 12;
+  const proposed = new Date(newYear, adjMonth, 1);
+  if(proposed < minDate || proposed > new Date(now.getFullYear(), now.getMonth(), 1)) return;
+  pemCalYear = newYear;
+  pemCalMonth = adjMonth;
+  renderPemCalendar();
+}
+
+function renderPemCalendar(){
+  const now = new Date();
+  const todayStr = today();
+  const minDate = new Date(now.getFullYear(), now.getMonth()-2, 1);
+  const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  document.getElementById('pem-cal-title').textContent = `${months[pemCalMonth]} ${pemCalYear}`;
+
+  const pemDates = {};
+  db.pem.forEach(p=>{ const d=p.Lien_Date||p.Date; if(d) pemDates[d]=p.Intensity; });
+
+  const firstDay = new Date(pemCalYear, pemCalMonth, 1);
+  const lastDay = new Date(pemCalYear, pemCalMonth+1, 0);
+  // Lundi = 0
+  let startDow = (firstDay.getDay()+6)%7;
+
+  let cells = '';
+  // Cellules vides avant le 1er
+  for(let i=0;i<startDow;i++) cells += '<div></div>';
+
+  for(let d=1; d<=lastDay.getDate(); d++){
+    const dateStr = `${pemCalYear}-${String(pemCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cellDate = new Date(pemCalYear, pemCalMonth, d);
+    const isFuture = dateStr > todayStr;
+    const isBeforeMin = cellDate < minDate;
+    const isToday = dateStr === todayStr;
+    const hasPem = pemDates[dateStr] != null;
+    const isSelected = dateStr === pemCalSelectedDate;
+
+    let bg = '#f5ede6', color = '#3a1a0a', border = 'transparent', cursor = 'pointer';
+    if(isFuture || isBeforeMin){ bg='#f0ede8'; color='#c0b0a0'; cursor='default'; }
+    else if(isSelected){ bg='#c04820'; color='#fff'; }
+    else if(hasPem){ bg='#fde8e0'; color='#c04820'; border='#e4b090'; }
+    else if(isToday){ border='#2a8a70'; }
+
+    const click = (!isFuture && !isBeforeMin) ? `onclick="selectPemCalDay('${dateStr}')"` : '';
+    cells += `<div ${click} style="text-align:center;padding:5px 2px;border-radius:8px;background:${bg};color:${color};border:1.5px solid ${border};cursor:${cursor};font-size:12px;font-weight:${hasPem||isSelected?'700':'400'}">
+      ${d}${hasPem?'<div style="font-size:8px;margin-top:1px">●</div>':''}
+    </div>`;
+  }
+  document.getElementById('pem-cal-grid').innerHTML = cells;
+}
+
+function selectPemCalDay(dateStr){
+  pemCalSelectedDate = dateStr;
+  renderPemCalendar();
+  const existing = db.pem.find(p=>(p.Lien_Date||p.Date)===dateStr);
+  retroPemInt = existing ? existing.Intensity : 1;
+  document.getElementById('retro-pm-pem').textContent = retroPemInt;
+  document.getElementById('pem-cal-date-label').textContent =
+    `${existing?'Modifier':'Ajouter'} un PEM le ${formatDate(dateStr)}`;
+
+  // Symptômes existants avec ✕
+  const existingSymptoms = existing && existing['symptomes associés']
+    ? existing['symptomes associés'].split(',').map(s=>s.trim()).filter(Boolean)
+    : [];
+  const existingEl = document.getElementById('cal-existing-symptoms');
+  existingEl.innerHTML = existingSymptoms.map(s=>
+    `<div style="display:flex;align-items:center;gap:4px;background:#fde8e0;border:1px solid #e4b090;border-radius:20px;padding:4px 10px;font-size:12px;color:#c04820">
+      ${s} <span onclick="removeCalSymptom('${s.replace(/'/g,'')}')" style="cursor:pointer;font-weight:700;margin-left:2px">✕</span>
+    </div>`
+  ).join('');
+
+  // Nuage de symptômes disponibles
+  const BASE_SYMS = ['Vertiges','Oppression thoracique','Symptômes gastriques','Difficultés à respirer','Sensibilité lumière','Sensibilité son','Maux de tête','Douleurs musculaires','Fatigue accrue','Nausées'];
+  const calTagEl = document.getElementById('cal-symptom-tags');
+  calTagEl.innerHTML = BASE_SYMS.map(s=>
+    `<div class="tag" onclick="addCalSymptom('${s}')">${s}</div>`
+  ).join('');
+
+  document.getElementById('cal-pem-other').value = '';
+  document.getElementById('pem-cal-form').style.display = 'block';
+}
+
+function removeCalSymptom(name){
+  const el = document.getElementById('cal-existing-symptoms');
+  const tags = [...el.querySelectorAll('div')].filter(d=>d.textContent.trim().replace('✕','').trim()!==name);
+  const remaining = [...el.querySelectorAll('div')]
+    .map(d=>d.textContent.trim().replace('✕','').trim())
+    .filter(s=>s!==name);
+  el.innerHTML = remaining.map(s=>
+    `<div style="display:flex;align-items:center;gap:4px;background:#fde8e0;border:1px solid #e4b090;border-radius:20px;padding:4px 10px;font-size:12px;color:#c04820">
+      ${s} <span onclick="removeCalSymptom('${s.replace(/'/g,'')}')" style="cursor:pointer;font-weight:700;margin-left:2px">✕</span>
+    </div>`
+  ).join('');
+}
+
+function addCalSymptom(name){
+  const el = document.getElementById('cal-existing-symptoms');
+  const existing = [...el.querySelectorAll('div')].map(d=>d.textContent.trim().replace('✕','').trim());
+  if(existing.includes(name)) return;
+  existing.push(name);
+  el.innerHTML = existing.map(s=>
+    `<div style="display:flex;align-items:center;gap:4px;background:#fde8e0;border:1px solid #e4b090;border-radius:20px;padding:4px 10px;font-size:12px;color:#c04820">
+      ${s} <span onclick="removeCalSymptom('${s.replace(/'/g,'')}')" style="cursor:pointer;font-weight:700;margin-left:2px">✕</span>
+    </div>`
+  ).join('');
+}
+
+function retroPemChange(d){
+  retroPemInt = Math.max(1, Math.min(10, retroPemInt + d));
+  document.getElementById('retro-pm-pem').textContent = retroPemInt;
+}
+
+function saveRetroPem(){
+  const date = pemCalSelectedDate;
+  if(!date){ showToast('❌ Sélectionne une date', true); return; }
+  // Récupérer symptômes
+  const symEls = document.getElementById('cal-existing-symptoms').querySelectorAll('div');
+  const syms = [...symEls].map(d=>d.textContent.trim().replace('✕','').trim()).filter(Boolean);
+  const other = document.getElementById('cal-pem-other').value.trim();
+  if(other) syms.push(other);
+  // Supprimer existant et remplacer
+  db.pem = db.pem.filter(p=>(p.Lien_Date||p.Date)!==date);
+  db.pem.push({
+    ID_Activite: uid(), Lien_Date: date,
+    Intensity: retroPemInt, Heure: 'Journée entière',
+    'symptomes associés': syms.join(', ')
+  });
+  saveDB();
+  closePemCalendar();
+  renderPem();
+  showToast('✅ Épisode PEM enregistré pour le ' + formatDate(date));
+}
+
+function renderPem(){
+  rebuildSymptomTags(null);
+  document.getElementById('pem-other').value = '';
+
+  // Normalise les entrées — accepte Lien_Date ou Date
+  const normalized = db.pem.map(p=>({
+    ...p,
+    Lien_Date: p.Lien_Date || p.Date || null,
+    Intensity: p['Intensity'] || p['Intensité'] || 0
+  })).filter(p=>p.Lien_Date);
+
+  const sorted = [...normalized].sort((a,b)=>b.Lien_Date.localeCompare(a.Lien_Date));
+  const todayEntry = sorted.find(p => p.Lien_Date === today());
+  const pastEntries = sorted.filter(p => p.Lien_Date < today());
+
+  function pemCard(p, isToday) {
+    return `<div class="card" style="border-left:3px solid var(--warn);margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${p['symptomes associés']?'10px':'6px'}">
+        <div style="font-size:13px;font-weight:600;color:${isToday?'var(--text)':'var(--muted)'}">${isToday?"Aujourd'hui — "+formatDate(p.Lien_Date):formatDate(p.Lien_Date)}</div>
+        <span class="pem-badge">Intensité ${p['Intensity']||p['Intensité']||'?'}/10</span>
+      </div>
+      ${p['symptomes associés']?`<div class="tag-list" style="margin-bottom:8px">${p['symptomes associés'].split(',').map(s=>s.trim()).filter(s=>s).map(s=>`<div class="tag" style="background:rgba(232,114,12,0.1);border-color:rgba(232,114,12,0.3);color:var(--warn);cursor:default">${s}</div>`).join('')}</div>`:''}
+      <button class="btn btn-sm" onclick="editPem('${p.Lien_Date}')" style="font-size:11px;padding:5px 10px">✏️ Modifier</button>
+    </div>`;
+  }
+
+  // Show either form or today's card
+  const formWrap = document.getElementById('pem-form-wrap');
+  const todayWrap = document.getElementById('pem-today');
+
+  if (todayEntry) {
+    formWrap.style.display = 'none';
+    todayWrap.innerHTML = pemCard(todayEntry, true);
+    todayWrap.style.display = 'block';
+  } else {
+    // Reset form
+    pemInt = 0;
+    document.getElementById('pm-pem').textContent = '0';
+    document.getElementById('pem-date').value = today();
+    document.getElementById('pem-symptoms-wrap').style.display = 'none';
+    formWrap.style.display = 'block';
+    todayWrap.style.display = 'none';
+    todayWrap.innerHTML = '';
+  }
+
+  // Past entries
+  document.getElementById('pem-list').innerHTML = pastEntries.length === 0
+    ? '<div class="empty">Aucun épisode antérieur</div>'
+    : pastEntries.map(p => pemCard(p, false)).join('');
+}
+
+function editPem(date) {
+  const p = db.pem.find(p=>p.Lien_Date===date);
+  if (!p) return;
+  // Show form
+  document.getElementById('pem-form-wrap').style.display = 'block';
+  document.getElementById('pem-today').style.display = 'none';
+  document.getElementById('pem-date').value = date;
+  pemInt = p['Intensity']||0;
+  document.getElementById('pm-pem').textContent = pemInt;
+  document.getElementById('pem-symptoms-wrap').style.display = pemInt > 0 ? 'block' : 'none';
+  rebuildSymptomTags(p['symptomes associés']||'');
+  document.getElementById('pem-other').value = '';
+  document.getElementById('page-pem').scrollTop = 0;
+  window.scrollTo(0,0);
+  showToast('📋 Données chargées — modifie puis enregistre');
+}
+
+function savePem(){
+  const date = document.getElementById('pem-date').value;
+  if (!date) { showToast('❌ Sélectionne une date', true); return; }
+  if (pemInt === 0) { showToast('❌ Intensity = 0, rien à enregistrer', true); return; }
+
+  // Add custom symptom to db if new
+  const other = document.getElementById('pem-other').value.trim();
+  if (other) {
+    if (!db.customSymptoms) db.customSymptoms = [];
+    if (!db.customSymptoms.map(s=>s.toLowerCase()).includes(other.toLowerCase())) {
+      db.customSymptoms.push(other);
+    }
+  }
+
+  db.pem = db.pem.filter(p => p.Lien_Date !== date);
+  const pemRow = {ID_Activite:uid(), Lien_Date:date, Intensity:pemInt, Heure:'Journée entière', 'symptomes associés':getSymptomes()};
+  db.pem.push(pemRow);
+  saveDB();
+  showToast('✅ PEM enregistré !');
+  renderPem();
+}
+
+function exportJSON(){
+  const data = JSON.stringify(db, null, 2);
+  const dataStr = 'data:application/json;charset=utf-8,' + encodeURIComponent(data);
+  const a = document.createElement('a');
+  a.setAttribute('href', dataStr);
+  a.setAttribute('download', 'sauvegarde_sante_' + today() + '.json');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('💾 Sauvegarde JSON téléchargée !');
+}
+
+function importJSON(event){
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!imported.journal && !imported.pem && !imported.activites) {
+        showToast('❌ Fichier JSON invalide', true); return;
+      }
+      Object.assign(db, imported);
+      if(!db.journal) db.journal=[];
+      if(!db.activites) db.activites=[];
+      if(!db.pem) db.pem=[];
+      if(!db.traitements) db.traitements=[];
+      if(!db.tension) db.tension=[];
+      saveDB();
+      showToast('✅ Données restaurées !');
+    } catch(err) {
+      showToast('❌ Erreur : fichier invalide', true);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderBackups(){
+  const el = document.getElementById('backups-list');
+  if(!el) return;
+  const backups = JSON.parse(localStorage.getItem('suivi_sante_backups')||'[]');
+  if(!backups.length){ el.innerHTML='<div style="font-size:12px;color:var(--muted)">Aucune sauvegarde disponible</div>'; return; }
+  el.innerHTML = backups.map((b,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text)">Sauvegarde ${i+1}</div>
+        <div style="font-size:11px;color:var(--muted)">${new Date(b.date).toLocaleString('fr-FR')}</div>
+      </div>
+      <button class="btn btn-sm" onclick="restoreBackup(${i})" style="font-size:11px">Restaurer</button>
+    </div>`).join('');
+}
+
+function restoreBackup(i){
+  const backups = JSON.parse(localStorage.getItem('suivi_sante_backups')||'[]');
+  if(!backups[i]) return;
+  const restored = JSON.parse(backups[i].data);
+  Object.assign(db, restored);
+  if(!db.journal) db.journal=[];
+  if(!db.activites) db.activites=[];
+  if(!db.pem) db.pem=[];
+  if(!db.traitements) db.traitements=[];
+  if(!db.tension) db.tension=[];
+  localStorage.setItem('suivi_sante', JSON.stringify(db));
+  showToast('✅ Sauvegarde restaurée !');
+  renderBackups();
+}
+
+function diagFull(){
+  const el = document.getElementById('pem-diag');
+  el.style.display = 'block';
+  const keys = Object.keys(localStorage);
+  const out = keys.map(k=>`${k}: ${localStorage.getItem(k).substring(0,200)}`).join('\n\n');
+  el.textContent = out;
+}
+
+function diagPem(){
+  const el = document.getElementById('pem-diag');
+  el.style.display = 'block';
+  el.textContent = JSON.stringify(db.pem, null, 2);
+}
+
+function exportCSV(type){
+  let rows=[],filename='';
+  if(type==='journal'){filename='journal.csv';const cols=['Date','Durée sommeil nocturne','Qualité Sommeil','Forme Matin','Forme Midi','Forme Soir','Forme journée','Etourdissement matin','Etourdissement AM','Etourdissement Soir','Humeur Matin','Humeur AM','Humeur Soir','Anxiété Matin','Anxiété AM','Anxiété Soir','Siestes (Nb)','Repos (Nb)','Pas','Cigarettes'];rows.push(cols);db.journal.forEach(r=>rows.push(cols.map(c=>r[c]!=null?r[c]:'')));}
+  else if(type==='activites'){filename='activities.csv';const cols=['ID_Activite','Lien_Date','Nature_Activite','Heure','Durée (min)','Effort','Durée'];rows.push(cols);db.activites.filter(a=>a.Lien_Date!=='__custom__').forEach(r=>rows.push(cols.map(c=>r[c]!=null?r[c]:'')));}
+  else{filename='pem.csv';const cols=['ID_Activite','Lien_Date','Intensity','Heure','symptomes associés'];rows.push(cols);db.pem.forEach(r=>rows.push(cols.map(c=>r[c]!=null?r[c]:'')));}
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));a.download=filename;a.click();
+  showToast('📥 '+filename+' téléchargé !');
+}
+
+function showToast(msg,isError=false){
+  const t=document.getElementById('toast');t.textContent=msg;t.style.background=isError?'#f87171':'#34d399';t.style.color=isError?'#fff':'#0a1a12';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ── ONBOARDING ───────────────────────────────────────────
+let obGender = null, obLang = 'fr';
+
+function selectGender(g){
+  obGender = g;
+  ['male','female','nonbinary'].forEach(id=>{
+    const el = document.getElementById('ob-'+id);
+    if(!el) return;
+    el.style.background = g===id ? '#e8f4f0' : '#fff';
+    el.style.borderColor = g===id ? '#2a8a70' : '#e4d0c4';
+    el.querySelector('div').style.color = g===id ? '#2a8a70' : '#3a1a0a';
+  });
+}
+
+function selectLang(l){
+  obLang = l;
+  ['fr','en'].forEach(id=>{
+    const el = document.getElementById('ob-'+id);
+    if(!el) return;
+    el.style.background = l===id ? '#e8f4f0' : '#fff';
+    el.style.borderColor = l===id ? '#2a8a70' : '#e4d0c4';
+    el.querySelector('div').style.color = l===id ? '#2a8a70' : '#3a1a0a';
+  });
+}
+
+function completeOnboarding(){
+  const pseudo = document.getElementById('ob-pseudo').value.trim();
+  const year = document.getElementById('ob-year').value.trim();
+  if(!pseudo || !obGender || !year){
+    document.getElementById('ob-error').style.display = 'block'; return;
+  }
+  localStorage.setItem('user_pseudo', pseudo);
+  localStorage.setItem('user_gender', obGender);
+  localStorage.setItem('user_year', year);
+  localStorage.setItem('user_country', document.getElementById('ob-country').value.trim());
+  localStorage.setItem('user_lang', obLang);
+  document.getElementById('onboarding-screen').style.display = 'none';
+  updateGreeting();
+}
+
+function getGreeting(){
+  const h = new Date().getHours();
+  const lang = localStorage.getItem('user_lang')||'fr';
+  if(lang==='en') return h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+  return h<12?'Bonjour':h<18?'Bonne après-midi':'Bonsoir';
+}
+
+function updateGreeting(){
+  const pseudo = localStorage.getItem('user_pseudo');
+  const el = document.getElementById('greeting-text');
+  if(el) el.textContent = pseudo ? getGreeting()+' '+pseudo+' 👋' : '';
+}
+
+function checkOnboarding(){
+  if(!localStorage.getItem('user_pseudo')){
+    document.getElementById('onboarding-screen').style.display = 'block';
+  } else {
+    updateGreeting();
+  }
+}
+
+document.getElementById('headerDate').textContent=formatDate(today());
+checkOnboarding();
+document.getElementById('in-commentaire').addEventListener('input', function(){
+  document.getElementById('commentaire-count').textContent = this.value.length;
+});
+// Migration v2 — Durée texte → numérique dans activités
+if(db.activites) db.activites.forEach(a=>{
+  if(a['Durée'] && typeof a['Durée']==='string'){
+    const m = a['Durée'].match(/(\d+)/);
+    if(m) a['Durée (min)'] = parseInt(m[1]);
+    // Détecter épuisement dans l'ancien texte
+    if(a['Durée'].toLowerCase().includes('épuisement') || a['Durée'].toLowerCase().includes('epuisement')){
+      if(!a['A accru la fatigue']) a['A accru la fatigue'] = 'oui';
+    }
+  }
+});
+initSaisie();
+</script>
+</body>
+</html>
